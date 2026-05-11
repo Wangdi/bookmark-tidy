@@ -7,14 +7,12 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "outDir": "./dist",
-    "rootDir": "./src",
     "resolveJsonModule": true,
     "declaration": true,
     "declarationMap": true,
     "sourceMap": true,
-    "types": ["chrome"]
+    "types": ["chrome", "node"]
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "vite.config.ts", "vitest.config.ts", "scripts/*.ts"],
   "exclude": ["node_modules", "dist"]
 }
