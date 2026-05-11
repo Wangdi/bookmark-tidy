@@ -1,0 +1,23 @@
+{
+  "name": "bookmark-tidy",
+  "version": "1.0.0",
+  "description": "Organize and tidy up your Chrome bookmarks",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --watch --mode development",
+    "build": "vite build && node scripts/build.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": ["chrome-extension", "bookmarks", "organization"],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.33.0",
+  "dependencies": {
+    "ml-kmeans": "^7.0.0"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.42",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.11"
+  }
+}
