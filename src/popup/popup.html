@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bookmark Tidy</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <div id="app">
+    <!-- IDLE State -->
+    <div id="idle-state" class="state">
+      <h1>📚 Bookmark Tidy</h1>
+      <p class="status-text">Ready to organize bookmarks</p>
+      <button id="start-btn" class="btn primary">Organize Bookmarks</button>
+      <p id="bookmark-count" class="count-text"></p>
+    </div>
+
+    <!-- PROCESSING State -->
+    <div id="processing-state" class="state hidden">
+      <h1>📚 Bookmark Tidy</h1>
+      <p class="status-text">Processing bookmarks...</p>
+      <div class="progress-container">
+        <div id="progress-bar" class="progress-bar"></div>
+      </div>
+      <p id="progress-text" class="progress-text">0%</p>
+      <p id="current-url" class="current-url"></p>
+      <p id="progress-count" class="count-text"></p>
+      <button id="cancel-btn" class="btn secondary">Cancel</button>
+    </div>
+
+    <!-- COMPLETE State -->
+    <div id="complete-state" class="state hidden">
+      <h1>📚 Bookmark Tidy</h1>
+      <p class="status-text success">✅ Organization complete!</p>
+      <div class="results">
+        <h3>📊 Results:</h3>
+        <ul id="results-list"></ul>
+      </div>
+      <p class="folder-hint">Check 📁Organized folder</p>
+      <button id="done-btn" class="btn primary">Done</button>
+    </div>
+
+    <!-- ERROR State -->
+    <div id="error-state" class="state hidden">
+      <h1>📚 Bookmark Tidy</h1>
+      <p class="status-text error">❌ Error</p>
+      <p id="error-message" class="error-message"></p>
+      <button id="retry-btn" class="btn primary">Try Again</button>
+    </div>
+  </div>
+
+  <script type="module" src="./index.ts"></script>
+</body>
+</html>

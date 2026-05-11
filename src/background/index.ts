@@ -1,10 +1,10 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState } from '../types';
-import { fetchBookmarks } from '../modules/fetcher';
-import { dedupeBookmarks } from '../modules/deduper';
-import { categorizeBookmarks } from '../modules/categorizer';
-import { organizeBookmarks } from '../modules/organizer';
+import { RawBookmark, ProgressEvent, OrganizerState } from "../types";
+import { fetchBookmarks } from "../modules/fetcher";
+import { dedupeBookmarks } from "../modules/deduper";
+import { categorizeBookmarks } from "../modules/categorizer";
+import { organizeBookmarks } from "../modules/organizer";
 
 const state: OrganizerState = {
   isRunning: false,
@@ -71,10 +71,10 @@ async function runOrganization(): Promise<void> {
 
     if (rawBookmarks.length === 0) {
       await sendProgress({
-        type: 'error',
+        type: "error",
         current: 0,
         total: 0,
-        error: 'No bookmarks found',
+        error: "No bookmarks found",
       });
       return;
     }
@@ -83,16 +83,16 @@ async function runOrganization(): Promise<void> {
 
     // Step 2: Fetch all bookmarks
     await sendProgress({
-      type: 'progress',
+      type: "progress",
       current: 0,
       total,
-      currentUrl: 'Starting...',
+      currentUrl: "Starting...",
     });
 
     const fetchResult = await fetchBookmarks(rawBookmarks, {
       onProgress: async (current, total, url) => {
         await sendProgress({
-          type: 'progress',
+          type: "progress",
           current,
           total,
           currentUrl: url,
@@ -103,10 +103,10 @@ async function runOrganization(): Promise<void> {
 
     if (state.shouldAbort) {
       await sendProgress({
-        type: 'error',
+        type: "error",
         current: 0,
         total: 0,
-        error: 'Operation cancelled',
+        error: "Operation cancelled",
       });
       return;
     }
@@ -122,19 +122,19 @@ async function runOrganization(): Promise<void> {
       categorizeResult.bookmarks,
       fetchResult.deadlinks,
       fetchResult.unreachable,
-      dedupeResult.duplicatesMerged
+      dedupeResult.duplicatesMerged,
     );
 
     // Send completion
     await sendProgress({
-      type: 'complete',
+      type: "complete",
       current: total,
       total,
       stats: organizeResult.stats,
     });
   } catch (error) {
     await sendProgress({
-      type: 'error',
+      type: "error",
       current: 0,
       total: 0,
       error: (error as Error).message,
@@ -161,17 +161,17 @@ function getState(): OrganizerState {
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message.type === 'START_ORGANIZE') {
+  if (message.type === "START_ORGANIZE") {
     runOrganization();
     sendResponse({ success: true });
-  } else if (message.type === 'CANCEL') {
+  } else if (message.type === "CANCEL") {
     cancelOperation();
     sendResponse({ success: true });
-  } else if (message.type === 'GET_STATE') {
+  } else if (message.type === "GET_STATE") {
     sendResponse(getState());
   }
   return true; // Keep message channel open for async response
 });
 
 // Log when service worker starts
-console.log('Bookmark Tidy service worker started');
+console.log("Bookmark Tidy service worker started");
