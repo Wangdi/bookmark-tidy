@@ -25,9 +25,28 @@ See [SPEC.md](./SPEC.md) for detailed specifications.
 ### Testing
 
 - Run `pnpm run typecheck` before committing
-- Run `pnpm run test` to execute unit tests
+- Run `pnpm run test` to execute all tests
+- Run `pnpm run test:coverage` for coverage report
 - Build must succeed: `pnpm run build`
 - Test extension in Chrome after significant changes
+- **Maintain 95%+ test coverage** - write tests for new code
+
+#### Testing Patterns
+
+**Unit Tests** - Test pure functions and utilities:
+```typescript
+// Test exported helper functions
+import { tokenize, generateCategoryName } from '../modules/categorizer';
+
+it('tokenizes text correctly', () => {
+  expect(tokenize('Hello World')).toContain('hello');
+});
+```
+
+**Integration Tests** - Mock external dependencies:
+- Use `vi.fn()` for mock functions
+- Use `vi.stubGlobal()` for global mocks (fetch, chrome)
+- See `fetcher.integration.test.ts` and `organizer.integration.test.ts` for examples
 
 ### Commit Messages
 

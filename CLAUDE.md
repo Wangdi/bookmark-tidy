@@ -5,6 +5,7 @@ A Chrome extension that organizes and tidies up user bookmarks by merging duplic
 **Documentation:**
 - [SPEC.md](./SPEC.md) - Technical specification
 - [AGENT.md](./AGENT.md) - Instructions for AI agents
+- [USAGE.md](./USAGE.md) - Installation, commands, and testing guide
 
 ## Project Structure
 
@@ -29,25 +30,6 @@ bookmark-tidy/
         ├── specs/        # Design specifications
         └── plans/        # Implementation plans
 ```
-
-## Commands
-
-```bash
-pnpm install        # Install dependencies
-pnpm run dev        # Development build (watch mode)
-pnpm run build      # Production build
-pnpm run typecheck  # Type check
-pnpm run test       # Run tests
-pnpm run test:watch # Run tests in watch mode
-```
-
-## Loading the Extension
-
-1. Run `pnpm run build`
-2. Open `chrome://extensions/`
-3. Enable "Developer mode"
-4. Click "Load unpacked"
-5. Select the `dist/` folder
 
 ## Architecture
 
