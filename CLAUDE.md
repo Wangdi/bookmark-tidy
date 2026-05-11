@@ -19,6 +19,9 @@ bookmark-tidy/
 │   │   └── organizer.ts  # Create folder structure in bookmarks
 │   ├── popup/            # Extension popup UI
 │   ├── utils/            # Shared utilities
+│   │   ├── tfidf.ts      # Custom TF-IDF implementation
+│   │   ├── url-normalizer.ts # URL normalization functions
+│   │   └── stop-words.ts # Stop words for tokenization
 │   └── types/            # TypeScript interfaces
 ├── dist/                 # Build output (load this in Chrome)
 └── docs/
@@ -34,6 +37,8 @@ pnpm install        # Install dependencies
 pnpm run dev        # Development build (watch mode)
 pnpm run build      # Production build
 pnpm run typecheck  # Type check
+pnpm run test       # Run tests
+pnpm run test:watch # Run tests in watch mode
 ```
 
 ## Loading the Extension
@@ -63,8 +68,8 @@ The extension uses a modular pipeline architecture:
 
 ## Dependencies
 
-- `natural` - TF-IDF vectorization and tokenization
 - `ml-kmeans` - K-means clustering algorithm
+- TF-IDF - Custom lightweight implementation (see `src/utils/tfidf.ts`)
 
 ## Future Improvements
 

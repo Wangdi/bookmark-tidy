@@ -25,6 +25,7 @@ See [SPEC.md](./SPEC.md) for detailed specifications.
 ### Testing
 
 - Run `pnpm run typecheck` before committing
+- Run `pnpm run test` to execute unit tests
 - Build must succeed: `pnpm run build`
 - Test extension in Chrome after significant changes
 
@@ -43,7 +44,7 @@ Use conventional commits:
 |--------|---------------|--------------|
 | `fetcher` | Fetch URLs, extract content | `types`, `url-normalizer` |
 | `deduper` | Normalize URLs, merge duplicates | `types`, `url-normalizer` |
-| `categorizer` | TF-IDF, clustering, naming | `types`, `stop-words`, `natural`, `ml-kmeans` |
+| `categorizer` | TF-IDF, clustering, naming | `types`, `stop-words`, `tfidf`, `ml-kmeans` |
 | `organizer` | Create bookmark folders | `types`, Chrome APIs |
 | `background` | Orchestrate pipeline | All modules |
 | `popup` | UI, progress display | `types` |
