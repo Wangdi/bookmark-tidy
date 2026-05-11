@@ -5,6 +5,12 @@ export default defineConfig({
   test: {
     include: ['src/**/*.test.ts'],
     globals: true,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'text-summary'],
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts', 'src/types/**', 'src/background/**', 'src/popup/**'],
+    },
   },
   resolve: {
     alias: {

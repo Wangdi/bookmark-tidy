@@ -2,9 +2,9 @@
 
 import { CategorizedBookmark, ProcessedBookmark } from '../types';
 
-const ORGANIZED_FOLDER_NAME = '📁Organized';
-const DEADLINKS_FOLDER_NAME = '⚠ Deadlinks';
-const UNREACHABLE_FOLDER_NAME = '⚠ Unreachable';
+export const ORGANIZED_FOLDER_NAME = '📁Organized';
+export const DEADLINKS_FOLDER_NAME = '⚠ Deadlinks';
+export const UNREACHABLE_FOLDER_NAME = '⚠ Unreachable';
 
 export interface OrganizerResult {
   success: boolean;
@@ -18,6 +18,22 @@ export interface OrganizerResult {
 }
 
 /**
+ * Recursively search for a folder by name
+ */
+export function searchFolder(node: chrome.bookmarks.BookmarkTreeNode, name: string): chrome.bookmarks.BookmarkTreeNode | null {
+  if (node.title === name && !node.url) {
+    return node;
+  }
+
+  for (const child of node.children || []) {
+    const found = searchFolder(child, name);
+    if (found) return found;
+  }
+
+  return null;
+}
+
+/**
  * Find existing organized folder
  */
 async function findOrganizedFolder(): Promise<chrome.bookmarks.BookmarkTreeNode | null> {
@@ -27,22 +43,6 @@ async function findOrganizedFolder(): Promise<chrome.bookmarks.BookmarkTreeNode 
   // Search in root level children (Bookmarks Bar, Other Bookmarks, etc.)
   for (const rootChild of root.children || []) {
     const found = searchFolder(rootChild, ORGANIZED_FOLDER_NAME);
-    if (found) return found;
-  }
-
-  return null;
-}
-
-/**
- * Recursively search for a folder by name
- */
-function searchFolder(node: chrome.bookmarks.BookmarkTreeNode, name: string): chrome.bookmarks.BookmarkTreeNode | null {
-  if (node.title === name && !node.url) {
-    return node;
-  }
-
-  for (const child of node.children || []) {
-    const found = searchFolder(child, name);
     if (found) return found;
   }
 
