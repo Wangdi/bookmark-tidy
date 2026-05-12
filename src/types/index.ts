@@ -41,6 +41,10 @@ export interface ProgressEvent {
 export interface OrganizerState {
   isRunning: boolean;
   shouldAbort: boolean;
+  // Current progress info for popup to restore state
+  current: number;
+  total: number;
+  currentUrl?: string;
 }
 
 export interface ClusterResult {
