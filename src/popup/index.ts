@@ -2,46 +2,84 @@
 
 import { ProgressEvent } from '../types';
 
-// DOM Elements
-const idleState = document.getElementById('idle-state')!;
-const processingState = document.getElementById('processing-state')!;
-const completeState = document.getElementById('complete-state')!;
-const errorState = document.getElementById('error-state')!;
+/**
+ * DOM element cache - populated on first access
+ */
+let elements: PopupElements | null = null;
 
-const startBtn = document.getElementById('start-btn')!;
-const cancelBtn = document.getElementById('cancel-btn')!;
-const doneBtn = document.getElementById('done-btn')!;
-const retryBtn = document.getElementById('retry-btn')!;
+export interface PopupElements {
+  idleState: HTMLElement;
+  processingState: HTMLElement;
+  completeState: HTMLElement;
+  errorState: HTMLElement;
+  startBtn: HTMLElement;
+  cancelBtn: HTMLElement;
+  doneBtn: HTMLElement;
+  retryBtn: HTMLElement;
+  bookmarkCount: HTMLElement;
+  progressBar: HTMLElement;
+  progressText: HTMLElement;
+  currentUrl: HTMLElement;
+  progressCount: HTMLElement;
+  resultsList: HTMLElement;
+  errorMessage: HTMLElement;
+}
 
-const bookmarkCount = document.getElementById('bookmark-count')!;
-const progressBar = document.getElementById('progress-bar')!;
-const progressText = document.getElementById('progress-text')!;
-const currentUrl = document.getElementById('current-url')!;
-const progressCount = document.getElementById('progress-count')!;
-const resultsList = document.getElementById('results-list')!;
-const errorMessage = document.getElementById('error-message')!;
+/**
+ * Get DOM elements (lazy initialization for testability)
+ */
+export function getElements(): PopupElements {
+  if (!elements) {
+    elements = {
+      idleState: document.getElementById('idle-state')!,
+      processingState: document.getElementById('processing-state')!,
+      completeState: document.getElementById('complete-state')!,
+      errorState: document.getElementById('error-state')!,
+      startBtn: document.getElementById('start-btn')!,
+      cancelBtn: document.getElementById('cancel-btn')!,
+      doneBtn: document.getElementById('done-btn')!,
+      retryBtn: document.getElementById('retry-btn')!,
+      bookmarkCount: document.getElementById('bookmark-count')!,
+      progressBar: document.getElementById('progress-bar')!,
+      progressText: document.getElementById('progress-text')!,
+      currentUrl: document.getElementById('current-url')!,
+      progressCount: document.getElementById('progress-count')!,
+      resultsList: document.getElementById('results-list')!,
+      errorMessage: document.getElementById('error-message')!,
+    };
+  }
+  return elements;
+}
+
+/**
+ * Set elements (for testing)
+ */
+export function setElements(mockElements: PopupElements | null) {
+  elements = mockElements;
+}
 
 /**
  * Show a specific state
  */
-function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
-  idleState.classList.add('hidden');
-  processingState.classList.add('hidden');
-  completeState.classList.add('hidden');
-  errorState.classList.add('hidden');
+export function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
+  const els = getElements();
+  els.idleState.classList.add('hidden');
+  els.processingState.classList.add('hidden');
+  els.completeState.classList.add('hidden');
+  els.errorState.classList.add('hidden');
 
   switch (state) {
     case 'idle':
-      idleState.classList.remove('hidden');
+      els.idleState.classList.remove('hidden');
       break;
     case 'processing':
-      processingState.classList.remove('hidden');
+      els.processingState.classList.remove('hidden');
       break;
     case 'complete':
-      completeState.classList.remove('hidden');
+      els.completeState.classList.remove('hidden');
       break;
     case 'error':
-      errorState.classList.remove('hidden');
+      els.errorState.classList.remove('hidden');
       break;
   }
 }
@@ -49,25 +87,27 @@ function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
 /**
  * Update progress bar
  */
-function updateProgress(current: number, total: number, url?: string) {
+export function updateProgress(current: number, total: number, url?: string) {
+  const els = getElements();
   const percent = total > 0 ? Math.round((current / total) * 100) : 0;
-  progressBar.style.width = `${percent}%`;
-  progressText.textContent = `${percent}%`;
+  els.progressBar.style.width = `${percent}%`;
+  els.progressText.textContent = `${percent}%`;
 
   if (url) {
-    currentUrl.textContent = `Fetching: ${url}`;
+    els.currentUrl.textContent = `Fetching: ${url}`;
   }
 
-  progressCount.textContent = `${current} of ${total} processed`;
+  els.progressCount.textContent = `${current} of ${total} processed`;
 }
 
 /**
  * Show results
  */
-function showResults(stats: ProgressEvent['stats']) {
+export function showResults(stats: ProgressEvent['stats']) {
   if (!stats) return;
 
-  resultsList.innerHTML = `
+  const els = getElements();
+  els.resultsList.innerHTML = `
     <li>• ${stats.processed} bookmarks processed</li>
     <li>• ${stats.duplicatesMerged} duplicates merged</li>
     <li>• ${stats.deadlinks} deadlinks found</li>
@@ -77,10 +117,9 @@ function showResults(stats: ProgressEvent['stats']) {
 }
 
 /**
- * Get bookmark count from background
+ * Count bookmarks in tree (pure function for testability)
  */
-async function getBookmarkCount(): Promise<number> {
-  const tree = await chrome.bookmarks.getTree();
+export function countBookmarksInTree(tree: chrome.bookmarks.BookmarkTreeNode[]): number {
   let count = 0;
 
   function traverse(node: chrome.bookmarks.BookmarkTreeNode) {
@@ -100,9 +139,17 @@ async function getBookmarkCount(): Promise<number> {
 }
 
 /**
+ * Get bookmark count from Chrome API
+ */
+export async function getBookmarkCount(): Promise<number> {
+  const tree = await chrome.bookmarks.getTree();
+  return countBookmarksInTree(tree);
+}
+
+/**
  * Initialize popup
  */
-async function init() {
+export async function init() {
   // Get current state
   const state = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
 
@@ -111,14 +158,14 @@ async function init() {
   } else {
     showState('idle');
     const count = await getBookmarkCount();
-    bookmarkCount.textContent = `${count} bookmarks found`;
+    getElements().bookmarkCount.textContent = `${count} bookmarks found`;
   }
 }
 
 /**
  * Start organization
  */
-async function startOrganization() {
+export async function startOrganization() {
   showState('processing');
   updateProgress(0, 0, 'Starting...');
 
@@ -128,46 +175,79 @@ async function startOrganization() {
 /**
  * Cancel organization
  */
-async function cancelOrganization() {
+export async function cancelOrganization() {
   await chrome.runtime.sendMessage({ type: 'CANCEL' });
   showState('idle');
 
   const count = await getBookmarkCount();
-  bookmarkCount.textContent = `${count} bookmarks found`;
+  getElements().bookmarkCount.textContent = `${count} bookmarks found`;
 }
 
 /**
  * Handle done button
  */
-function handleDone() {
+export function handleDone() {
   window.close();
 }
 
 /**
  * Handle retry button
  */
-async function handleRetry() {
+export async function handleRetry() {
   await startOrganization();
 }
 
-// Listen for progress updates
-chrome.runtime.onMessage.addListener((message: ProgressEvent) => {
+/**
+ * Handle progress message from background
+ */
+export function handleProgressMessage(message: ProgressEvent): boolean {
   if (message.type === 'progress') {
     updateProgress(message.current, message.total, message.currentUrl);
+    return true;
   } else if (message.type === 'complete') {
     showResults(message.stats);
     showState('complete');
+    return true;
   } else if (message.type === 'error') {
-    errorMessage.textContent = message.error || 'Unknown error';
+    getElements().errorMessage.textContent = message.error || 'Unknown error';
     showState('error');
+    return true;
   }
-});
+  return false;
+}
 
-// Event listeners
-startBtn.addEventListener('click', startOrganization);
-cancelBtn.addEventListener('click', cancelOrganization);
-doneBtn.addEventListener('click', handleDone);
-retryBtn.addEventListener('click', handleRetry);
+/**
+ * Setup event listeners
+ */
+export function setupEventListeners() {
+  const els = getElements();
+  els.startBtn.addEventListener('click', startOrganization);
+  els.cancelBtn.addEventListener('click', cancelOrganization);
+  els.doneBtn.addEventListener('click', handleDone);
+  els.retryBtn.addEventListener('click', handleRetry);
+}
 
-// Initialize
-init();
+/**
+ * Setup message listener
+ */
+export function setupMessageListener() {
+  chrome.runtime.onMessage.addListener((message: ProgressEvent) => {
+    handleProgressMessage(message);
+  });
+}
+
+/**
+ * Setup popup - initialize everything
+ */
+export function setupPopup() {
+  setupEventListeners();
+  setupMessageListener();
+  init();
+}
+
+// Auto-setup when DOM is ready (only in browser environment)
+if (typeof window !== 'undefined' && document.readyState === 'complete') {
+  setupPopup();
+} else if (typeof window !== 'undefined') {
+  document.addEventListener('DOMContentLoaded', setupPopup);
+}
