@@ -11,6 +11,16 @@ import {
 } from '../popup/index';
 import { ProgressEvent } from '../types';
 
+// Helper to create a mock bookmark node
+function createMockBookmark(id: string, title: string, url: string): chrome.bookmarks.BookmarkTreeNode {
+  return { id, title, url, syncing: false };
+}
+
+// Helper to create a mock folder node
+function createMockFolder(id: string, title: string, children: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode {
+  return { id, title, children, syncing: false };
+}
+
 // Helper to create mock DOM element
 function createMockElement(): HTMLElement {
   return {
@@ -196,14 +206,10 @@ describe('popup', () => {
   describe('countBookmarksInTree', () => {
     it('counts bookmarks in flat tree', () => {
       const tree: chrome.bookmarks.BookmarkTreeNode[] = [
-        {
-          id: '1',
-          title: 'Root',
-          children: [
-            { id: '2', title: 'Bookmark 1', url: 'https://example1.com' },
-            { id: '3', title: 'Bookmark 2', url: 'https://example2.com' },
-          ],
-        },
+        createMockFolder('1', 'Root', [
+          createMockBookmark('2', 'Bookmark 1', 'https://example1.com'),
+          createMockBookmark('3', 'Bookmark 2', 'https://example2.com'),
+        ]),
       ];
 
       expect(countBookmarksInTree(tree)).toBe(2);
@@ -211,21 +217,13 @@ describe('popup', () => {
 
     it('counts bookmarks in nested tree', () => {
       const tree: chrome.bookmarks.BookmarkTreeNode[] = [
-        {
-          id: '1',
-          title: 'Root',
-          children: [
-            {
-              id: '2',
-              title: 'Folder',
-              children: [
-                { id: '3', title: 'Bookmark 1', url: 'https://example1.com' },
-                { id: '4', title: 'Bookmark 2', url: 'https://example2.com' },
-              ],
-            },
-            { id: '5', title: 'Bookmark 3', url: 'https://example3.com' },
-          ],
-        },
+        createMockFolder('1', 'Root', [
+          createMockFolder('2', 'Folder', [
+            createMockBookmark('3', 'Bookmark 1', 'https://example1.com'),
+            createMockBookmark('4', 'Bookmark 2', 'https://example2.com'),
+          ]),
+          createMockBookmark('5', 'Bookmark 3', 'https://example3.com'),
+        ]),
       ];
 
       expect(countBookmarksInTree(tree)).toBe(3);
@@ -237,17 +235,9 @@ describe('popup', () => {
 
     it('returns 0 for tree with only folders', () => {
       const tree: chrome.bookmarks.BookmarkTreeNode[] = [
-        {
-          id: '1',
-          title: 'Root',
-          children: [
-            {
-              id: '2',
-              title: 'Folder',
-              children: [],
-            },
-          ],
-        },
+        createMockFolder('1', 'Root', [
+          createMockFolder('2', 'Folder', []),
+        ]),
       ];
 
       expect(countBookmarksInTree(tree)).toBe(0);
@@ -255,20 +245,12 @@ describe('popup', () => {
 
     it('handles multiple root nodes', () => {
       const tree: chrome.bookmarks.BookmarkTreeNode[] = [
-        {
-          id: '1',
-          title: 'Root 1',
-          children: [
-            { id: '2', title: 'Bookmark 1', url: 'https://example1.com' },
-          ],
-        },
-        {
-          id: '3',
-          title: 'Root 2',
-          children: [
-            { id: '4', title: 'Bookmark 2', url: 'https://example2.com' },
-          ],
-        },
+        createMockFolder('1', 'Root 1', [
+          createMockBookmark('2', 'Bookmark 1', 'https://example1.com'),
+        ]),
+        createMockFolder('3', 'Root 2', [
+          createMockBookmark('4', 'Bookmark 2', 'https://example2.com'),
+        ]),
       ];
 
       expect(countBookmarksInTree(tree)).toBe(2);
@@ -276,31 +258,15 @@ describe('popup', () => {
 
     it('handles deeply nested structure', () => {
       const tree: chrome.bookmarks.BookmarkTreeNode[] = [
-        {
-          id: '1',
-          title: 'Root',
-          children: [
-            {
-              id: '2',
-              title: 'Level 1',
-              children: [
-                {
-                  id: '3',
-                  title: 'Level 2',
-                  children: [
-                    {
-                      id: '4',
-                      title: 'Level 3',
-                      children: [
-                        { id: '5', title: 'Deep Bookmark', url: 'https://example.com' },
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
+        createMockFolder('1', 'Root', [
+          createMockFolder('2', 'Level 1', [
+            createMockFolder('3', 'Level 2', [
+              createMockFolder('4', 'Level 3', [
+                createMockBookmark('5', 'Deep Bookmark', 'https://example.com'),
+              ]),
+            ]),
+          ]),
+        ]),
       ];
 
       expect(countBookmarksInTree(tree)).toBe(1);
