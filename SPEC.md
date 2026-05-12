@@ -142,8 +142,8 @@ interface CategorizedBookmark extends ProcessedBookmark {
 
 | Package | Version | Purpose |
 |---------|---------|---------|
-| `natural` | ^6.0.0 | TF-IDF, tokenization |
-| `ml-kmeans` | ^5.0.0 | K-means clustering |
+| `ml-kmeans` | ^7.0.0 | K-means clustering |
+| (custom) | - | TF-IDF implementation in `src/utils/tfidf.ts` |
 
 ## Chrome Permissions
 

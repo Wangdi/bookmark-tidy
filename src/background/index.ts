@@ -6,21 +6,52 @@ import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks } from "../modules/categorizer";
 import { organizeBookmarks } from "../modules/organizer";
 
-const state: OrganizerState = {
+/**
+ * State manager - exported for testing
+ */
+export const state: OrganizerState = {
   isRunning: false,
   shouldAbort: false,
 };
 
 /**
- * Get all bookmarks from Chrome
+ * Reset state (for testing)
  */
-async function getAllBookmarks(): Promise<RawBookmark[]> {
-  const tree = await chrome.bookmarks.getTree();
+export function resetState(): void {
+  state.isRunning = false;
+  state.shouldAbort = false;
+}
+
+/**
+ * Count bookmarks in tree (pure function for testability)
+ */
+export function countBookmarksInTree(tree: chrome.bookmarks.BookmarkTreeNode[]): number {
+  let count = 0;
+
+  function traverse(node: chrome.bookmarks.BookmarkTreeNode) {
+    if (node.url) count++;
+    if (node.children) {
+      for (const child of node.children) {
+        traverse(child);
+      }
+    }
+  }
+
+  for (const root of tree) {
+    traverse(root);
+  }
+
+  return count;
+}
+
+/**
+ * Extract bookmarks from tree (pure function for testability)
+ */
+export function extractBookmarksFromTree(tree: chrome.bookmarks.BookmarkTreeNode[]): RawBookmark[] {
   const bookmarks: RawBookmark[] = [];
 
   function traverse(node: chrome.bookmarks.BookmarkTreeNode) {
     if (node.url) {
-      // It's a bookmark (not a folder)
       bookmarks.push({
         id: node.id,
         url: node.url,
@@ -28,7 +59,6 @@ async function getAllBookmarks(): Promise<RawBookmark[]> {
         parentId: node.parentId,
       });
     }
-
     if (node.children) {
       for (const child of node.children) {
         traverse(child);
@@ -44,9 +74,17 @@ async function getAllBookmarks(): Promise<RawBookmark[]> {
 }
 
 /**
+ * Get all bookmarks from Chrome
+ */
+export async function getAllBookmarks(): Promise<RawBookmark[]> {
+  const tree = await chrome.bookmarks.getTree();
+  return extractBookmarksFromTree(tree);
+}
+
+/**
  * Send progress event to popup
  */
-async function sendProgress(event: ProgressEvent): Promise<void> {
+export async function sendProgress(event: ProgressEvent): Promise<void> {
   try {
     await chrome.runtime.sendMessage(event);
   } catch {
@@ -57,7 +95,7 @@ async function sendProgress(event: ProgressEvent): Promise<void> {
 /**
  * Run the organization pipeline
  */
-async function runOrganization(): Promise<void> {
+export async function runOrganization(): Promise<void> {
   if (state.isRunning) {
     return;
   }
@@ -148,19 +186,25 @@ async function runOrganization(): Promise<void> {
 /**
  * Cancel running operation
  */
-function cancelOperation(): void {
+export function cancelOperation(): void {
   state.shouldAbort = true;
 }
 
 /**
  * Get current state
  */
-function getState(): OrganizerState {
+export function getState(): OrganizerState {
   return { ...state };
 }
 
-// Listen for messages from popup
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+/**
+ * Handle message from popup
+ */
+export function handleMessage(
+  message: { type: string },
+  _sender: chrome.runtime.MessageSender,
+  sendResponse: (response?: unknown) => void
+): boolean {
   if (message.type === "START_ORGANIZE") {
     runOrganization();
     sendResponse({ success: true });
@@ -171,7 +215,17 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     sendResponse(getState());
   }
   return true; // Keep message channel open for async response
-});
+}
 
-// Log when service worker starts
-console.log("Bookmark Tidy service worker started");
+/**
+ * Setup message listener
+ */
+export function setupMessageListener(): void {
+  chrome.runtime.onMessage.addListener(handleMessage);
+}
+
+// Auto-setup when service worker loads (only in browser environment)
+if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
+  setupMessageListener();
+  console.log("Bookmark Tidy service worker started");
+}

@@ -5,6 +5,7 @@ A Chrome extension that organizes and tidies up user bookmarks by merging duplic
 **Documentation:**
 - [SPEC.md](./SPEC.md) - Technical specification
 - [AGENT.md](./AGENT.md) - Instructions for AI agents
+- [USAGE.md](./USAGE.md) - Installation, commands, and testing guide
 
 ## Project Structure
 
@@ -19,6 +20,9 @@ bookmark-tidy/
 │   │   └── organizer.ts  # Create folder structure in bookmarks
 │   ├── popup/            # Extension popup UI
 │   ├── utils/            # Shared utilities
+│   │   ├── tfidf.ts      # Custom TF-IDF implementation
+│   │   ├── url-normalizer.ts # URL normalization functions
+│   │   └── stop-words.ts # Stop words for tokenization
 │   └── types/            # TypeScript interfaces
 ├── dist/                 # Build output (load this in Chrome)
 └── docs/
@@ -26,23 +30,6 @@ bookmark-tidy/
         ├── specs/        # Design specifications
         └── plans/        # Implementation plans
 ```
-
-## Commands
-
-```bash
-pnpm install        # Install dependencies
-pnpm run dev        # Development build (watch mode)
-pnpm run build      # Production build
-pnpm run typecheck  # Type check
-```
-
-## Loading the Extension
-
-1. Run `pnpm run build`
-2. Open `chrome://extensions/`
-3. Enable "Developer mode"
-4. Click "Load unpacked"
-5. Select the `dist/` folder
 
 ## Architecture
 
@@ -63,8 +50,8 @@ The extension uses a modular pipeline architecture:
 
 ## Dependencies
 
-- `natural` - TF-IDF vectorization and tokenization
 - `ml-kmeans` - K-means clustering algorithm
+- TF-IDF - Custom lightweight implementation (see `src/utils/tfidf.ts`)
 
 ## Future Improvements
 

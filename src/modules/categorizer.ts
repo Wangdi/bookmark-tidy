@@ -5,10 +5,10 @@ import { STOP_WORDS } from '../utils/stop-words';
 import { TfIdf } from '../utils/tfidf';
 import { kmeans } from 'ml-kmeans';
 
-const MAX_CATEGORIES = 15;
-const MIN_CATEGORIES = 3;
-const SUB_CATEGORY_THRESHOLD = 10;
-const MAX_CATEGORY_NAME_LENGTH = 50;
+export const MAX_CATEGORIES = 15;
+export const MIN_CATEGORIES = 3;
+export const SUB_CATEGORY_THRESHOLD = 10;
+export const MAX_CATEGORY_NAME_LENGTH = 50;
 
 export interface CategorizerResult {
   bookmarks: CategorizedBookmark[];
@@ -18,7 +18,7 @@ export interface CategorizerResult {
 /**
  * Build text corpus from bookmarks
  */
-function buildCorpus(bookmarks: ProcessedBookmark[]): string[] {
+export function buildCorpus(bookmarks: ProcessedBookmark[]): string[] {
   return bookmarks.map(bookmark => {
     const parts: string[] = [];
 
@@ -56,7 +56,7 @@ function buildCorpus(bookmarks: ProcessedBookmark[]): string[] {
 /**
  * Tokenize and clean text
  */
-function tokenize(text: string): string[] {
+export function tokenize(text: string): string[] {
   return text
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
@@ -67,14 +67,14 @@ function tokenize(text: string): string[] {
 /**
  * Compute optimal number of clusters
  */
-function computeClusterCount(n: number): number {
+export function computeClusterCount(n: number): number {
   return Math.min(MAX_CATEGORIES, Math.max(MIN_CATEGORIES, Math.ceil(Math.sqrt(n / 2))));
 }
 
 /**
  * Generate category name from cluster terms
  */
-function generateCategoryName(topTerms: string[], allTopTerms: string[][]): string {
+export function generateCategoryName(topTerms: string[], allTopTerms: string[][]): string {
   if (topTerms.length === 0) {
     return 'Uncategorized';
   }

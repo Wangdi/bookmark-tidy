@@ -3,9 +3,9 @@
 import { RawBookmark, ProcessedBookmark, BookmarkMeta } from '../types';
 import { isValidUrl, isFetchableUrl } from '../utils/url-normalizer';
 
-const FETCH_TIMEOUT = 30000; // 30 seconds
-const BATCH_SIZE = 5;
-const BATCH_DELAY = 500; // 500ms between batches
+export const FETCH_TIMEOUT = 30000; // 30 seconds
+export const BATCH_SIZE = 5;
+export const BATCH_DELAY = 500; // 500ms between batches
 
 export interface FetcherOptions {
   onProgress?: (current: number, total: number, url: string) => void;
@@ -21,7 +21,7 @@ export interface FetcherResult {
 /**
  * Extract metadata and headings from HTML content
  */
-function extractContent(html: string): { meta: BookmarkMeta; headings: string[] } {
+export function extractContent(html: string): { meta: BookmarkMeta; headings: string[] } {
   const meta: BookmarkMeta = {};
   const headings: string[] = [];
 
@@ -71,7 +71,7 @@ function extractContent(html: string): { meta: BookmarkMeta; headings: string[] 
 /**
  * Determine if an error indicates a deadlink vs unreachable
  */
-function classifyError(error: Error): 'deadlink' | 'unreachable' {
+export function classifyError(error: Error): 'deadlink' | 'unreachable' {
   const message = error.message.toLowerCase();
 
   // DNS failures, 404s, 410s are definitive deadlinks
