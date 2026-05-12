@@ -12,6 +12,9 @@ import { organizeBookmarks } from "../modules/organizer";
 export const state: OrganizerState = {
   isRunning: false,
   shouldAbort: false,
+  current: 0,
+  total: 0,
+  currentUrl: undefined,
 };
 
 /**
@@ -20,6 +23,9 @@ export const state: OrganizerState = {
 export function resetState(): void {
   state.isRunning = false;
   state.shouldAbort = false;
+  state.current = 0;
+  state.total = 0;
+  state.currentUrl = undefined;
 }
 
 /**
@@ -82,9 +88,21 @@ export async function getAllBookmarks(): Promise<RawBookmark[]> {
 }
 
 /**
- * Send progress event to popup
+ * Send progress event to popup and update state
  */
 export async function sendProgress(event: ProgressEvent): Promise<void> {
+  // Update state so popup can restore progress on reopen
+  if (event.type === 'progress') {
+    state.current = event.current;
+    state.total = event.total;
+    state.currentUrl = event.currentUrl;
+  } else if (event.type === 'complete' || event.type === 'error') {
+    // Clear progress on completion or error
+    state.current = 0;
+    state.total = 0;
+    state.currentUrl = undefined;
+  }
+
   try {
     await chrome.runtime.sendMessage(event);
   } catch {

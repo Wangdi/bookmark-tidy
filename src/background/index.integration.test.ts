@@ -146,6 +146,61 @@ describe('background integration tests', () => {
         total: 0,
       })).resolves.toBeUndefined();
     });
+
+    it('updates state with progress info on progress event', async () => {
+      await sendProgress({
+        type: 'progress',
+        current: 5,
+        total: 10,
+        currentUrl: 'https://example.com',
+      });
+
+      expect(state.current).toBe(5);
+      expect(state.total).toBe(10);
+      expect(state.currentUrl).toBe('https://example.com');
+    });
+
+    it('clears progress state on complete event', async () => {
+      // Set some initial progress state
+      state.current = 8;
+      state.total = 10;
+      state.currentUrl = 'https://example.com';
+
+      await sendProgress({
+        type: 'complete',
+        current: 10,
+        total: 10,
+        stats: {
+          processed: 10,
+          duplicatesMerged: 0,
+          deadlinks: 0,
+          unreachable: 0,
+          categories: 5,
+        },
+      });
+
+      expect(state.current).toBe(0);
+      expect(state.total).toBe(0);
+      expect(state.currentUrl).toBeUndefined();
+    });
+
+    it('clears progress state on error event', async () => {
+      // Set some initial progress state
+      state.current = 5;
+      state.total = 10;
+      state.currentUrl = 'https://example.com';
+
+      await sendProgress({
+        type: 'error',
+        current: 0,
+        total: 0,
+        error: 'Something went wrong',
+      });
+
+      expect(state.current).toBe(0);
+      expect(state.total).toBe(0);
+      expect(state.currentUrl).toBeUndefined();
+    });
   });
 
   describe('runOrganization', () => {

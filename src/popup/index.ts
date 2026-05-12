@@ -155,6 +155,13 @@ export async function init() {
 
   if (state?.isRunning) {
     showState('processing');
+    // Restore progress UI from current state
+    if (state.total > 0) {
+      updateProgress(state.current, state.total, state.currentUrl);
+    } else {
+      // Just started, show initial state
+      updateProgress(0, 0, 'Starting...');
+    }
   } else {
     showState('idle');
     const count = await getBookmarkCount();

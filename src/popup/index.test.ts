@@ -377,4 +377,90 @@ describe('popup', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  describe('init', () => {
+    it('shows processing state and restores progress when isRunning and total > 0', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: true,
+        shouldAbort: false,
+        current: 5,
+        total: 10,
+        currentUrl: 'https://example.com',
+      });
+      const mockGetTree = vi.fn();
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage },
+        bookmarks: { getTree: mockGetTree },
+      });
+
+      // Import init dynamically to use the mocked chrome API
+      const { init } = await import('../popup/index');
+
+      await init();
+
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.progressBar.style.width).toBe('50%');
+      expect(mockElements.progressText.textContent).toBe('50%');
+      expect(mockElements.currentUrl.textContent).toBe('Fetching: https://example.com');
+      expect(mockElements.progressCount.textContent).toBe('5 of 10 processed');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('shows processing state with "Starting..." when isRunning and total is 0', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: true,
+        shouldAbort: false,
+        current: 0,
+        total: 0,
+        currentUrl: undefined,
+      });
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage },
+        bookmarks: { getTree: vi.fn() },
+      });
+
+      const { init } = await import('../popup/index');
+
+      await init();
+
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.currentUrl.textContent).toBe('Fetching: Starting...');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('shows idle state when not running', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: false,
+        shouldAbort: false,
+        current: 0,
+        total: 0,
+        currentUrl: undefined,
+      });
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [
+          { id: '1', title: 'Bookmark', url: 'https://example.com' },
+        ],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage },
+        bookmarks: { getTree: mockGetTree },
+      });
+
+      const { init } = await import('../popup/index');
+
+      await init();
+
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+
+      vi.unstubAllGlobals();
+    });
+  });
 });
