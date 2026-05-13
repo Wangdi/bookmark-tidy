@@ -38,6 +38,15 @@ function createMockButton(): HTMLButtonElement {
   } as unknown as HTMLButtonElement;
 }
 
+// Helper to create mock input element
+function createMockInput(): HTMLInputElement {
+  return {
+    ...createMockElement(),
+    value: '',
+    checked: false,
+  } as unknown as HTMLInputElement;
+}
+
 // Helper to create mock elements
 function createMockElements(): PopupElements {
   return {
@@ -57,6 +66,8 @@ function createMockElements(): PopupElements {
     progressCount: createMockElement(),
     resultsList: createMockElement(),
     errorMessage: createMockElement(),
+    trialCount: createMockInput(),
+    trialError: createMockElement(),
   };
 }
 
