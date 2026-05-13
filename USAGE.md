@@ -126,6 +126,23 @@ Get notified when bookmark organization completes, even if you close the popup:
 - Toggle notifications on/off in the popup
 - Setting is saved automatically
 
+## Auto-navigate to Bookmarks Manager
+
+Automatically open Chrome's Bookmarks Manager when organization completes:
+
+1. **Enable auto-navigate**: Toggle is on by default in the popup
+2. **Start organization**: Click "Organize Bookmarks"
+3. **Auto-open**: When complete, Chrome's Bookmarks Manager opens automatically
+4. **Folder focus**: The page navigates to the organized folder
+
+**Works with:**
+- Full mode: Opens to `📁Organized/` folder
+- Trial mode: Opens to `📁Organized (Trial N) - YYYY-MM-DD/` folder
+
+**Preferences:**
+- Toggle auto-navigate on/off in the popup
+- Setting is saved automatically
+
 ## Troubleshooting
 
 | Issue | Solution |
