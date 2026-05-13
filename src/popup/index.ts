@@ -180,6 +180,34 @@ export async function handleNotificationToggle(): Promise<void> {
   );
 }
 
+/**
+ * Load auto-navigate preference from storage
+ */
+export async function loadAutoNavigatePreference(): Promise<void> {
+  const els = getElements();
+  const result = await chrome.storage.sync.get('userPreferences');
+  const prefs = result.userPreferences || { autoNavigate: true };
+  els.autoNavigateToggle.checked = prefs.autoNavigate !== false;
+}
+
+/**
+ * Handle auto-navigate toggle change
+ */
+export async function handleAutoNavigateToggle(): Promise<void> {
+  const els = getElements();
+  const autoNavigate = els.autoNavigateToggle.checked;
+
+  await chrome.storage.sync.set({
+    userPreferences: { autoNavigate }
+  });
+
+  // Show feedback
+  showStatusMessage(
+    autoNavigate ? '✓ Auto-navigate enabled' : '✗ Auto-navigate disabled',
+    2000
+  );
+}
+
 // Trial mode constants (local copies)
 const TRIAL_MIN_BOOKMARKS = 10;
 const TRIAL_MAX_BOOKMARKS = 500;
@@ -261,6 +289,8 @@ export async function getBookmarkCount(): Promise<number> {
 export async function init() {
   // Load notification preference
   await loadNotificationPreference();
+  // Load auto-navigate preference
+  await loadAutoNavigatePreference();
 
   // Get current state
   const state = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
@@ -434,6 +464,7 @@ export function setupEventListeners() {
   els.retryBtn.addEventListener('click', handleRetry);
   els.resetBtn.addEventListener('click', handleReset);
   els.notificationToggle.addEventListener('change', handleNotificationToggle);
+  els.autoNavigateToggle.addEventListener('change', handleAutoNavigateToggle);
 }
 
 /**

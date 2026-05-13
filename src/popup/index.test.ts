@@ -1375,4 +1375,123 @@ describe('showStatusMessage', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  describe('loadAutoNavigatePreference', () => {
+    it('loads enabled preference from storage', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({
+        userPreferences: { autoNavigate: true }
+      });
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadAutoNavigatePreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadAutoNavigatePreference();
+
+      expect(mockStorageGet).toHaveBeenCalledWith('userPreferences');
+      expect(mockElements.autoNavigateToggle.checked).toBe(true);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('loads disabled preference from storage', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({
+        userPreferences: { autoNavigate: false }
+      });
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadAutoNavigatePreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadAutoNavigatePreference();
+
+      expect(mockElements.autoNavigateToggle.checked).toBe(false);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('defaults to enabled when no preference stored', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({});
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadAutoNavigatePreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadAutoNavigatePreference();
+
+      expect(mockElements.autoNavigateToggle.checked).toBe(true);
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('handleAutoNavigateToggle', () => {
+    it('saves enabled state to storage', async () => {
+      vi.useFakeTimers();
+      const mockStorageSet = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { set: mockStorageSet } },
+      });
+
+      vi.resetModules();
+      const { handleAutoNavigateToggle, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.autoNavigateToggle.checked = true;
+
+      await handleAutoNavigateToggle();
+
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        userPreferences: { autoNavigate: true }
+      });
+      expect(mockElements.bookmarkCount.textContent).toBe('✓ Auto-navigate enabled');
+
+      vi.advanceTimersByTime(2000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('saves disabled state to storage', async () => {
+      vi.useFakeTimers();
+      const mockStorageSet = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { set: mockStorageSet } },
+      });
+
+      vi.resetModules();
+      const { handleAutoNavigateToggle, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.autoNavigateToggle.checked = false;
+
+      await handleAutoNavigateToggle();
+
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        userPreferences: { autoNavigate: false }
+      });
+      expect(mockElements.bookmarkCount.textContent).toBe('✗ Auto-navigate disabled');
+
+      vi.advanceTimersByTime(2000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+  });
 });
