@@ -59,3 +59,7 @@ export interface ClusterResult {
   bookmarks: CategorizedBookmark[];
   categoryNames: string[];
 }
+
+export interface OrganizationOptions {
+  maxBookmarks?: number;  // undefined = all, number = trial mode
+}

@@ -7,6 +7,7 @@ import {
   resetState,
   state,
   handleMessage,
+  generateTrialFolderName,
 } from '../background/index';
 
 // Helper to create a mock bookmark node
@@ -18,6 +19,35 @@ function createMockBookmark(id: string, title: string, url: string, parentId?: s
 function createMockFolder(id: string, title: string, children: chrome.bookmarks.BookmarkTreeNode[] = []): chrome.bookmarks.BookmarkTreeNode {
   return { id, title, children, syncing: false };
 }
+
+describe('OrganizationOptions type', () => {
+  it('accepts undefined maxBookmarks for full mode', () => {
+    const options: import('../types').OrganizationOptions = {};
+    expect(options.maxBookmarks).toBeUndefined();
+  });
+
+  it('accepts number for trial mode', () => {
+    const options: import('../types').OrganizationOptions = { maxBookmarks: 50 };
+    expect(options.maxBookmarks).toBe(50);
+  });
+});
+
+describe('Trial mode constants', () => {
+  it('defines minimum trial count as 10', async () => {
+    const { TRIAL_MIN_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_MIN_BOOKMARKS).toBe(10);
+  });
+
+  it('defines maximum trial count as 500', async () => {
+    const { TRIAL_MAX_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_MAX_BOOKMARKS).toBe(500);
+  });
+
+  it('defines default trial count as 50', async () => {
+    const { TRIAL_DEFAULT_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_DEFAULT_BOOKMARKS).toBe(50);
+  });
+});
 
 describe('ProgressEvent trial mode', () => {
   it('includes isTrialMode flag in progress event', () => {
@@ -34,6 +64,61 @@ describe('ProgressEvent trial mode', () => {
     };
     expect(event.isTrialMode).toBe(true);
     expect(event.trialInfo?.folderName).toContain('Trial 25');
+  });
+});
+
+describe('generateTrialFolderName', () => {
+  it('generates folder name with trial count and date', async () => {
+    const name = generateTrialFolderName(25);
+
+    expect(name).toContain('📁Organized (Trial 25)');
+    expect(name).toMatch(/\d{4}-\d{2}-\d{2}/);  // Contains date YYYY-MM-DD
+  });
+
+  it('uses provided date', async () => {
+    const name = generateTrialFolderName(50, '2026-05-14');
+
+    expect(name).toBe('📁Organized (Trial 50) - 2026-05-14');
+  });
+
+  it('handles different counts', async () => {
+    expect(generateTrialFolderName(10)).toContain('Trial 10');
+    expect(generateTrialFolderName(500)).toContain('Trial 500');
+  });
+});
+
+describe('shuffleArray', () => {
+  it('returns array of same length', async () => {
+    const { shuffleArray } = await import('../background/index');
+    const arr = [1, 2, 3, 4, 5];
+    expect(shuffleArray(arr)).toHaveLength(5);
+  });
+
+  it('contains all original elements', async () => {
+    const { shuffleArray } = await import('../background/index');
+    const arr = [1, 2, 3, 4, 5];
+    const shuffled = shuffleArray(arr);
+    expect(shuffled.sort()).toEqual(arr.sort());
+  });
+
+  it('does not modify original array', async () => {
+    const { shuffleArray } = await import('../background/index');
+    const arr = [1, 2, 3, 4, 5];
+    const original = [...arr];
+    shuffleArray(arr);
+    expect(arr).toEqual(original);
+  });
+
+  it('produces different orders on multiple calls', async () => {
+    const { shuffleArray } = await import('../background/index');
+    const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    const results = new Set();
+
+    for (let i = 0; i < 100; i++) {
+      results.add(shuffleArray(arr).join(','));
+    }
+
+    expect(results.size).toBeGreaterThan(1);
   });
 });
 

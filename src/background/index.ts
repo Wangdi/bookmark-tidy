@@ -20,6 +20,13 @@ const FETCH_BATCH_SIZE = 10;  // Number of URLs to fetch concurrently
 const SPARSE_THRESHOLD = 500; // Use sparse vectors for collections > 500 bookmarks
 
 /**
+ * Trial mode configuration
+ */
+export const TRIAL_MIN_BOOKMARKS = 10;
+export const TRIAL_MAX_BOOKMARKS = 500;
+export const TRIAL_DEFAULT_BOOKMARKS = 50;
+
+/**
  * State manager - exported for testing
  */
 export const state: OrganizerState = {
@@ -34,6 +41,30 @@ export const state: OrganizerState = {
  * AbortController for cancelling in-flight fetch operations
  */
 let fetchAbortController: AbortController | null = null;
+
+/**
+ * Generate trial folder name with count and timestamp
+ * Format: 📁Organized (Trial N) - YYYY-MM-DD
+ */
+export function generateTrialFolderName(
+  count: number,
+  date?: string
+): string {
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  return `📁Organized (Trial ${count}) - ${dateStr}`;
+}
+
+/**
+ * Fisher-Yates shuffle for uniform random selection
+ */
+export function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
 
 /**
  * Reset state (for testing)
