@@ -19,6 +19,24 @@ function createMockFolder(id: string, title: string, children: chrome.bookmarks.
   return { id, title, children, syncing: false };
 }
 
+describe('ProgressEvent trial mode', () => {
+  it('includes isTrialMode flag in progress event', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'progress',
+      current: 5,
+      total: 25,
+      isTrialMode: true,
+      trialInfo: {
+        folderName: '📁Organized (Trial 25) - 2026-05-14',
+        processedCount: 25,
+        totalCount: 100,
+      },
+    };
+    expect(event.isTrialMode).toBe(true);
+    expect(event.trialInfo?.folderName).toContain('Trial 25');
+  });
+});
+
 describe('background unit tests', () => {
   beforeEach(() => {
     resetState();

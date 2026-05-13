@@ -23,6 +23,12 @@ export interface CategorizedBookmark extends ProcessedBookmark {
   subCategory?: string;
 }
 
+export interface TrialInfo {
+  folderName: string;       // e.g., "📁Organized (Trial 25) - 2026-05-14"
+  processedCount: number;   // Number of bookmarks in trial
+  totalCount: number;       // Total bookmarks available
+}
+
 export interface ProgressEvent {
   type: 'progress' | 'complete' | 'error';
   current: number;
@@ -36,6 +42,8 @@ export interface ProgressEvent {
     categories: number;
   };
   error?: string;
+  isTrialMode?: boolean;  // Flag for trial mode
+  trialInfo?: TrialInfo;  // Trial-specific information
 }
 
 export interface OrganizerState {
