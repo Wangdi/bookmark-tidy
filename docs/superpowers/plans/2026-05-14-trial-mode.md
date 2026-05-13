@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add trial mode to process a random subset of N bookmarks before committing to full organization.
+**Goal:** Add trial mode to process a configurable subset of N bookmarks, with results preserved in timestamped folders for later review.
 
-**Architecture:** Fisher-Yates shuffle for random selection, separate `🧪Trial/` folder for trial results, input validation in popup, message passing between popup and background with `maxBookmarks` option.
+**Architecture:** Fisher-Yates shuffle for random selection, timestamped `📁Organized (Trial N) - YYYY-MM-DD/` folder naming, input validation (min 10, max 500, default 50), message passing between popup and background with `maxBookmarks` option.
 
 **Tech Stack:** TypeScript, Vitest, Chrome Extensions API, Fisher-Yates shuffle algorithm
 
@@ -16,11 +16,11 @@
 - None (all changes to existing files)
 
 **Modified files:**
-- `src/types/index.ts` - Add `OrganizationOptions` and `isTrialMode` to types
-- `src/background/index.ts` - Add shuffle logic, trial mode handling, folder selection
+- `src/types/index.ts` - Add `OrganizationOptions`, `isTrialMode`, `trialInfo` to types
+- `src/background/index.ts` - Add shuffle logic, trial mode handling, timestamped folder creation
 - `src/background/index.test.ts` - Unit tests for shuffle and selection
 - `src/background/index.integration.test.ts` - Integration tests for trial workflow
-- `src/modules/organizer.ts` - Support custom folder name
+- `src/modules/organizer.ts` - Support custom folder name with timestamp
 - `src/modules/organizer.test.ts` - Tests for folder naming
 - `src/modules/organizer.integration.test.ts` - Integration tests for folder creation
 - `src/popup/popup.html` - Add trial input UI
@@ -52,8 +52,8 @@ describe('OrganizationOptions type', () => {
   });
 
   it('accepts number for trial mode', () => {
-    const options: import('../types').OrganizationOptions = { maxBookmarks: 25 };
-    expect(options.maxBookmarks).toBe(25);
+    const options: import('../types').OrganizationOptions = { maxBookmarks: 50 };
+    expect(options.maxBookmarks).toBe(50);
   });
 });
 ```
@@ -87,7 +87,7 @@ git commit -m "feat: add OrganizationOptions type for trial mode"
 
 ---
 
-### Task 2: Add isTrialMode to ProgressEvent
+### Task 2: Add isTrialMode and trialInfo to ProgressEvent
 
 **Files:**
 - Modify: `src/types/index.ts`
@@ -97,15 +97,21 @@ git commit -m "feat: add OrganizationOptions type for trial mode"
 Add to `src/background/index.test.ts`:
 
 ```typescript
-describe('ProgressEvent isTrialMode', () => {
+describe('ProgressEvent trial mode', () => {
   it('includes isTrialMode flag in progress event', () => {
     const event: import('../types').ProgressEvent = {
       type: 'progress',
       current: 5,
       total: 25,
       isTrialMode: true,
+      trialInfo: {
+        folderName: '📁Organized (Trial 25) - 2026-05-14',
+        processedCount: 25,
+        totalCount: 100,
+      },
     };
     expect(event.isTrialMode).toBe(true);
+    expect(event.trialInfo?.folderName).toContain('Trial 25');
   });
 });
 ```
@@ -120,6 +126,12 @@ Expected: FAIL with "Property 'isTrialMode' does not exist"
 Modify `src/types/index.ts`:
 
 ```typescript
+export interface TrialInfo {
+  folderName: string;       // e.g., "📁Organized (Trial 25) - 2026-05-14"
+  processedCount: number;   // Number of bookmarks in trial
+  totalCount: number;       // Total bookmarks available
+}
+
 export interface ProgressEvent {
   type: 'progress' | 'complete' | 'error';
   current: number;
@@ -133,7 +145,8 @@ export interface ProgressEvent {
     categories: number;
   };
   error?: string;
-  isTrialMode?: boolean;  // NEW: flag for trial mode
+  isTrialMode?: boolean;  // Flag for trial mode
+  trialInfo?: TrialInfo;  // Trial-specific information
 }
 ```
 
@@ -146,12 +159,72 @@ Expected: PASS
 
 ```bash
 git add src/types/index.ts src/background/index.test.ts
-git commit -m "feat: add isTrialMode flag to ProgressEvent"
+git commit -m "feat: add isTrialMode and TrialInfo to ProgressEvent"
 ```
 
 ---
 
-### Task 3: Implement shuffleArray Function
+### Task 3: Add Trial Mode Constants
+
+**Files:**
+- Modify: `src/background/index.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `src/background/index.test.ts`:
+
+```typescript
+describe('Trial mode constants', () => {
+  it('defines minimum trial count as 10', () => {
+    const { TRIAL_MIN_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_MIN_BOOKMARKS).toBe(10);
+  });
+
+  it('defines maximum trial count as 500', () => {
+    const { TRIAL_MAX_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_MAX_BOOKMARKS).toBe(500);
+  });
+
+  it('defines default trial count as 50', () => {
+    const { TRIAL_DEFAULT_BOOKMARKS } = await import('../background/index');
+    expect(TRIAL_DEFAULT_BOOKMARKS).toBe(50);
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm test src/background/index.test.ts`
+Expected: FAIL with "TRIAL_MIN_BOOKMARKS is not defined"
+
+- [ ] **Step 3: Write minimal implementation**
+
+Add to `src/background/index.ts` (after FETCH_BATCH_SIZE):
+
+```typescript
+/**
+ * Trial mode configuration
+ */
+export const TRIAL_MIN_BOOKMARKS = 10;
+export const TRIAL_MAX_BOOKMARKS = 500;
+export const TRIAL_DEFAULT_BOOKMARKS = 50;
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pnpm test src/background/index.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/background/index.ts src/background/index.test.ts
+git commit -m "feat: add trial mode constants (min 10, max 500, default 50)"
+```
+
+---
+
+### Task 4: Implement shuffleArray Function
 
 **Files:**
 - Modify: `src/background/index.ts`
@@ -162,23 +235,21 @@ git commit -m "feat: add isTrialMode flag to ProgressEvent"
 Add to `src/background/index.test.ts`:
 
 ```typescript
-import { resetState } from '../background/index';
-
 describe('shuffleArray', () => {
-  it('returns array of same length', () => {
+  it('returns array of same length', async () => {
     const { shuffleArray } = await import('../background/index');
     const arr = [1, 2, 3, 4, 5];
     expect(shuffleArray(arr)).toHaveLength(5);
   });
 
-  it('contains all original elements', () => {
+  it('contains all original elements', async () => {
     const { shuffleArray } = await import('../background/index');
     const arr = [1, 2, 3, 4, 5];
     const shuffled = shuffleArray(arr);
     expect(shuffled.sort()).toEqual(arr.sort());
   });
 
-  it('does not modify original array', () => {
+  it('does not modify original array', async () => {
     const { shuffleArray } = await import('../background/index');
     const arr = [1, 2, 3, 4, 5];
     const original = [...arr];
@@ -186,7 +257,7 @@ describe('shuffleArray', () => {
     expect(arr).toEqual(original);
   });
 
-  it('produces different orders on multiple calls', () => {
+  it('produces different orders on multiple calls', async () => {
     const { shuffleArray } = await import('../background/index');
     const arr = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     const results = new Set();
@@ -237,7 +308,7 @@ git commit -m "feat: implement Fisher-Yates shuffle for random selection"
 
 ---
 
-### Task 4: Implement selectRandomBookmarks Function
+### Task 5: Implement selectRandomBookmarks Function
 
 **Files:**
 - Modify: `src/background/index.ts`
@@ -255,13 +326,13 @@ describe('selectRandomBookmarks', () => {
     title: `Bookmark ${id}`,
   });
 
-  it('returns all bookmarks when count >= total', () => {
+  it('returns all bookmarks when count >= total', async () => {
     const { selectRandomBookmarks } = await import('../background/index');
     const bookmarks = [createBookmark('1'), createBookmark('2'), createBookmark('3')];
     expect(selectRandomBookmarks(bookmarks, 5)).toHaveLength(3);
   });
 
-  it('returns exactly N bookmarks', () => {
+  it('returns exactly N bookmarks', async () => {
     const { selectRandomBookmarks } = await import('../background/index');
     const bookmarks = [
       createBookmark('1'), createBookmark('2'), createBookmark('3'),
@@ -270,7 +341,7 @@ describe('selectRandomBookmarks', () => {
     expect(selectRandomBookmarks(bookmarks, 3)).toHaveLength(3);
   });
 
-  it('returns subset of original bookmarks', () => {
+  it('returns subset of original bookmarks', async () => {
     const { selectRandomBookmarks } = await import('../background/index');
     const bookmarks = [
       createBookmark('1'), createBookmark('2'), createBookmark('3'),
@@ -282,7 +353,7 @@ describe('selectRandomBookmarks', () => {
     });
   });
 
-  it('returns empty array when count is 0', () => {
+  it('returns empty array when count is 0', async () => {
     const { selectRandomBookmarks } = await import('../background/index');
     const bookmarks = [createBookmark('1'), createBookmark('2')];
     expect(selectRandomBookmarks(bookmarks, 0)).toHaveLength(0);
@@ -328,7 +399,82 @@ git commit -m "feat: implement selectRandomBookmarks for trial mode"
 
 ---
 
-### Task 5: Modify organizeBookmarks for Custom Folder Name
+### Task 6: Implement generateTrialFolderName Function
+
+**Files:**
+- Modify: `src/background/index.ts`
+- Modify: `src/background/index.test.ts`
+
+- [ ] **Step 1: Write the failing test**
+
+Add to `src/background/index.test.ts`:
+
+```typescript
+describe('generateTrialFolderName', () => {
+  it('generates folder name with trial count and date', async () => {
+    const { generateTrialFolderName } = await import('../background/index');
+    
+    const name = generateTrialFolderName(25);
+    
+    expect(name).toContain('📁Organized (Trial 25)');
+    expect(name).toMatch(/\d{4}-\d{2}-\d{2}/);  // Contains date YYYY-MM-DD
+  });
+
+  it('uses provided date', async () => {
+    const { generateTrialFolderName } = await import('../background/index');
+    
+    const name = generateTrialFolderName(50, '2026-05-14');
+    
+    expect(name).toBe('📁Organized (Trial 50) - 2026-05-14');
+  });
+
+  it('handles different counts', async () => {
+    const { generateTrialFolderName } = await import('../background/index');
+    
+    expect(generateTrialFolderName(10)).toContain('Trial 10');
+    expect(generateTrialFolderName(500)).toContain('Trial 500');
+  });
+});
+```
+
+- [ ] **Step 2: Run test to verify it fails**
+
+Run: `pnpm test src/background/index.test.ts`
+Expected: FAIL with "generateTrialFolderName is not defined"
+
+- [ ] **Step 3: Write minimal implementation**
+
+Add to `src/background/index.ts` (after selectRandomBookmarks):
+
+```typescript
+/**
+ * Generate trial folder name with count and timestamp
+ * Format: 📁Organized (Trial N) - YYYY-MM-DD
+ */
+export function generateTrialFolderName(
+  count: number,
+  date?: string
+): string {
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  return `📁Organized (Trial ${count}) - ${dateStr}`;
+}
+```
+
+- [ ] **Step 4: Run test to verify it passes**
+
+Run: `pnpm test src/background/index.test.ts`
+Expected: PASS
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/background/index.ts src/background/index.test.ts
+git commit -m "feat: implement generateTrialFolderName with timestamp format"
+```
+
+---
+
+### Task 7: Modify organizeBookmarks for Custom Folder Name
 
 **Files:**
 - Modify: `src/modules/organizer.ts`
@@ -339,7 +485,7 @@ git commit -m "feat: implement selectRandomBookmarks for trial mode"
 Add to `src/modules/organizer.test.ts`:
 
 ```typescript
-describe('organizeBookmarks folder name', () => {
+describe('organizeBookmarks custom folder name', () => {
   it('accepts custom folder name parameter', async () => {
     const mockCreate = vi.fn().mockResolvedValue({ id: '1', title: 'Test' });
     vi.stubGlobal('chrome', {
@@ -352,10 +498,31 @@ describe('organizeBookmarks folder name', () => {
     });
 
     const { organizeBookmarks } = await import('../modules/organizer');
-    await organizeBookmarks([], [], [], 'Trial');
+    await organizeBookmarks([], [], [], 0, '📁Organized (Trial 25) - 2026-05-14');
 
     expect(mockCreate).toHaveBeenCalledWith(
-      expect.objectContaining({ title: '🧪Trial' })
+      expect.objectContaining({ title: '📁Organized (Trial 25) - 2026-05-14' })
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('uses default folder name when not specified', async () => {
+    const mockCreate = vi.fn().mockResolvedValue({ id: '1', title: 'Test' });
+    vi.stubGlobal('chrome', {
+      bookmarks: {
+        getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]),
+        removeTree: vi.fn(),
+        create: mockCreate,
+      },
+      runtime: { lastError: null },
+    });
+
+    const { organizeBookmarks } = await import('../modules/organizer');
+    await organizeBookmarks([], [], [], 0);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '📁Organized' })
     );
 
     vi.unstubAllGlobals();
@@ -366,32 +533,72 @@ describe('organizeBookmarks folder name', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm test src/modules/organizer.test.ts`
-Expected: FAIL with "Received undefined" or wrong folder name
+Expected: FAIL with "Expected '📁Organized (Trial 25)" or wrong signature
 
 - [ ] **Step 3: Write minimal implementation**
 
 Modify `src/modules/organizer.ts`:
 
-Find the `organizeBookmarks` function signature and change:
+1. Find the `organizeBookmarks` function signature and change:
 
 ```typescript
 export async function organizeBookmarks(
-  bookmarks: CategorizedBookmark[],
+  categorizedBookmarks: CategorizedBookmark[],
   deadlinks: ProcessedBookmark[],
   unreachable: ProcessedBookmark[],
-  folderName: string = 'Organized'  // NEW: configurable folder name
-): Promise<void> {
+  duplicatesMerged: number,
+  folderName: string = '📁Organized'  // NEW: configurable folder name
+): Promise<OrganizerResult> {
 ```
 
-Then find where the folder is created and change:
+2. Find where the folder is created and update to use the parameter:
 
 ```typescript
-  // Create organized folder
-  const emoji = folderName === 'Trial' ? '🧪' : '📁';
-  const folder = await chrome.bookmarks.create({
-    parentId: parent.id,
-    title: `${emoji}${folderName}`,
-  });
+  // Delete existing folder with same name (for trial folders, this allows multiple trials)
+  // Note: We only delete if it's the main 📁Organized folder, not trial folders
+  
+  // Create root organized folder
+  const organizedFolder = await createFolder(folderName, parentId);
+```
+
+3. Update `clearOrganizedFolder` to handle both types:
+
+```typescript
+export async function clearOrganizedFolder(
+  folderName: string = '📁Organized'
+): Promise<void> {
+  const existing = await findFolderByName(folderName);
+  if (existing && existing.id) {
+    await chrome.bookmarks.removeTree(existing.id);
+  }
+}
+```
+
+4. Add helper function to find folder by name:
+
+```typescript
+async function findFolderByName(name: string): Promise<chrome.bookmarks.BookmarkTreeNode | null> {
+  const tree = await chrome.bookmarks.getTree();
+  const root = tree[0];
+
+  function search(node: chrome.bookmarks.BookmarkTreeNode): chrome.bookmarks.BookmarkTreeNode | null {
+    if (node.title === name && !node.url) {
+      return node;
+    }
+    for (const child of node.children || []) {
+      const found = search(child);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  for (const rootChild of root.children || []) {
+    const found = search(rootChild);
+    if (found) return found;
+  }
+
+  return null;
+}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -408,91 +615,7 @@ git commit -m "feat: support custom folder name in organizeBookmarks"
 
 ---
 
-### Task 6: Modify clearOrganizedFolder for Custom Folder Name
-
-**Files:**
-- Modify: `src/modules/organizer.ts`
-- Modify: `src/modules/organizer.test.ts`
-
-- [ ] **Step 1: Write the failing test**
-
-Add to `src/modules/organizer.test.ts`:
-
-```typescript
-describe('clearOrganizedFolder folder name', () => {
-  it('accepts custom folder name parameter', async () => {
-    const mockRemoveTree = vi.fn();
-    vi.stubGlobal('chrome', {
-      bookmarks: {
-        getTree: vi.fn().mockResolvedValue([{
-          id: '0',
-          title: 'Root',
-          children: [{
-            id: '1',
-            title: 'Other Bookmarks',
-            children: [{
-              id: '2',
-              title: '🧪Trial',
-            }],
-          }],
-        }]),
-        removeTree: mockRemoveTree,
-      },
-      runtime: { lastError: null },
-    });
-
-    const { clearOrganizedFolder } = await import('../modules/organizer');
-    await clearOrganizedFolder('Trial');
-
-    expect(mockRemoveTree).toHaveBeenCalledWith('2');
-
-    vi.unstubAllGlobals();
-  });
-});
-```
-
-- [ ] **Step 2: Run test to verify it fails**
-
-Run: `pnpm test src/modules/organizer.test.ts`
-Expected: FAIL with folder not found or wrong folder deleted
-
-- [ ] **Step 3: Write minimal implementation**
-
-Modify `src/modules/organizer.ts`:
-
-Find the `clearOrganizedFolder` function signature and change:
-
-```typescript
-export async function clearOrganizedFolder(
-  folderName: string = 'Organized'
-): Promise<void> {
-```
-
-Then find the folder search logic and update:
-
-```typescript
-  const emoji = folderName === 'Trial' ? '🧪' : '📁';
-  const targetTitle = `${emoji}${folderName}`;
-  
-  // Find and remove folder with matching title
-  // ... existing logic but check for targetTitle instead of hardcoded
-```
-
-- [ ] **Step 4: Run test to verify it passes**
-
-Run: `pnpm test src/modules/organizer.test.ts`
-Expected: PASS
-
-- [ ] **Step 5: Commit**
-
-```bash
-git add src/modules/organizer.ts src/modules/organizer.test.ts
-git commit -m "feat: support custom folder name in clearOrganizedFolder"
-```
-
----
-
-### Task 7: Update resetStorage to Clear Both Folders
+### Task 8: Update resetStorage to Clear Only Main Folder
 
 **Files:**
 - Modify: `src/background/index.ts`
@@ -503,23 +626,26 @@ git commit -m "feat: support custom folder name in clearOrganizedFolder"
 Add to `src/background/index.integration.test.ts`:
 
 ```typescript
-describe('resetStorage clears both folders', () => {
-  it('clears both Organized and Trial folders', async () => {
+describe('resetStorage clears only main folder', () => {
+  it('clears only 📁Organized folder, not trial folders', async () => {
     const mockRemoveTree = vi.fn();
+    const mockGetTree = vi.fn().mockResolvedValue([{
+      id: '0',
+      title: 'Root',
+      children: [{
+        id: '1',
+        title: 'Other Bookmarks',
+        children: [
+          { id: '2', title: '📁Organized' },
+          { id: '3', title: '📁Organized (Trial 25) - 2026-05-14' },
+          { id: '4', title: '📁Organized (Trial 50) - 2026-05-13' },
+        ],
+      }],
+    }]);
+
     vi.stubGlobal('chrome', {
       bookmarks: {
-        getTree: vi.fn().mockResolvedValue([{
-          id: '0',
-          title: 'Root',
-          children: [{
-            id: '1',
-            title: 'Other Bookmarks',
-            children: [
-              { id: '2', title: '📁Organized' },
-              { id: '3', title: '🧪Trial' },
-            ],
-          }],
-        }]),
+        getTree: mockGetTree,
         removeTree: mockRemoveTree,
       },
       runtime: { lastError: null },
@@ -529,15 +655,13 @@ describe('resetStorage clears both folders', () => {
       clearAll: vi.fn(),
     }));
 
-    vi.mock('../modules/organizer', () => ({
-      clearOrganizedFolder: mockRemoveTree,
-    }));
-
     const { resetStorage } = await import('../background/index');
     await resetStorage();
 
-    expect(mockRemoveTree).toHaveBeenCalledWith('Organized');
-    expect(mockRemoveTree).toHaveBeenCalledWith('Trial');
+    // Should only delete the main 📁Organized folder
+    expect(mockRemoveTree).toHaveBeenCalledWith('2');
+    expect(mockRemoveTree).not.toHaveBeenCalledWith('3');
+    expect(mockRemoveTree).not.toHaveBeenCalledWith('4');
 
     vi.unstubAllGlobals();
   });
@@ -547,7 +671,7 @@ describe('resetStorage clears both folders', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm test src/background/index.integration.test.ts`
-Expected: FAIL with "Expected 'Trial' to have been called"
+Expected: FAIL with "Expected 'removeTree' not called with '3'"
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -567,9 +691,9 @@ export async function resetStorage(): Promise<void> {
   // Clear IndexedDB storage
   await clearAll();
 
-  // Delete both organized folders
-  await clearOrganizedFolder('Organized');
-  await clearOrganizedFolder('Trial');
+  // Delete only the main organized folder (not trial folders)
+  // Trial folders are preserved for user review
+  await clearOrganizedFolder('📁Organized');
 }
 ```
 
@@ -582,14 +706,14 @@ Expected: PASS
 
 ```bash
 git add src/background/index.ts src/background/index.integration.test.ts
-git commit -m "feat: clear both Organized and Trial folders on reset"
+git commit -m "feat: resetStorage clears only main folder, preserves trial folders"
 ```
 
 ---
 
 ## Phase 2: Backend - Integration (Day 1 continued)
 
-### Task 8: Modify runOrganization for Trial Mode
+### Task 9: Modify runOrganization for Trial Mode
 
 **Files:**
 - Modify: `src/background/index.ts`
@@ -613,7 +737,7 @@ describe('runOrganization trial mode', () => {
     }]);
 
     vi.stubGlobal('chrome', {
-      bookmarks: { getTree: mockGetTree, create: vi.fn(), removeTree: vi.fn() },
+      bookmarks: { getTree: mockGetTree, create: vi.fn().mockResolvedValue({ id: '1' }), removeTree: vi.fn() },
       runtime: { sendMessage: vi.fn(), lastError: null },
     });
 
@@ -621,7 +745,7 @@ describe('runOrganization trial mode', () => {
       fetchBookmark: vi.fn(async (b) => ({ ...b, status: 'ok', meta: {}, headings: [] })),
     }));
 
-    const { runOrganization, resetState } = await import('../background/index');
+    const { runOrganization, resetState, state } = await import('../background/index');
     resetState();
     
     await runOrganization({ maxBookmarks: 25 });
@@ -639,6 +763,82 @@ describe('runOrganization trial mode', () => {
     await runOrganization({ maxBookmarks: 10 });
 
     expect(state.isTrialMode).toBe(true);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('creates timestamped trial folder', async () => {
+    const mockCreate = vi.fn().mockResolvedValue({ id: 'folder-1' });
+    
+    vi.stubGlobal('chrome', {
+      bookmarks: { 
+        getTree: vi.fn().mockResolvedValue([{
+          id: '0',
+          title: 'Root',
+          children: Array(50).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        }]), 
+        create: mockCreate, 
+        removeTree: vi.fn() 
+      },
+      runtime: { sendMessage: vi.fn(), lastError: null },
+    });
+
+    vi.mock('../modules/fetcher', () => ({
+      fetchBookmark: vi.fn(async (b) => ({ ...b, status: 'ok', meta: {}, headings: [] })),
+    }));
+
+    const { runOrganization, resetState } = await import('../background/index');
+    resetState();
+    
+    await runOrganization({ maxBookmarks: 25 });
+
+    // First create call should be for the trial folder
+    const folderCall = mockCreate.mock.calls.find(
+      call => call[0].title?.includes('Trial 25')
+    );
+    expect(folderCall).toBeDefined();
+    expect(folderCall[0].title).toMatch(/📁Organized \(Trial 25\) - \d{4}-\d{2}-\d{2}/);
+
+    vi.unstubAllGlobals();
+  });
+
+  it('full mode creates clean 📁Organized folder', async () => {
+    const mockCreate = vi.fn().mockResolvedValue({ id: 'folder-1' });
+    
+    vi.stubGlobal('chrome', {
+      bookmarks: { 
+        getTree: vi.fn().mockResolvedValue([{
+          id: '0',
+          title: 'Root',
+          children: Array(50).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        }]), 
+        create: mockCreate, 
+        removeTree: vi.fn() 
+      },
+      runtime: { sendMessage: vi.fn(), lastError: null },
+    });
+
+    vi.mock('../modules/fetcher', () => ({
+      fetchBookmark: vi.fn(async (b) => ({ ...b, status: 'ok', meta: {}, headings: [] })),
+    }));
+
+    const { runOrganization, resetState } = await import('../background/index');
+    resetState();
+    
+    await runOrganization();  // No maxBookmarks = full mode
+
+    // Should create clean 📁Organized folder
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '📁Organized' })
+    );
 
     vi.unstubAllGlobals();
   });
@@ -667,7 +867,7 @@ export const state: OrganizerState = {
 };
 ```
 
-2. Update `OrganizationState` interface in `src/types/index.ts`:
+2. Update `OrganizerState` interface in `src/types/index.ts`:
 
 ```typescript
 export interface OrganizerState {
@@ -686,51 +886,104 @@ export interface OrganizerState {
 export async function runOrganization(
   options?: OrganizationOptions
 ): Promise<boolean> {
-  // ... existing early returns ...
+  if (state.isRunning) {
+    return false;
+  }
 
   state.isRunning = true;
   state.shouldAbort = false;
 
   try {
-    const tree = await chrome.bookmarks.getTree();
-    let bookmarks = extractBookmarksFromTree(tree);
-    const totalCount = bookmarks.length;
+    // Step 1: Get all bookmarks
+    const rawBookmarks = await getAllBookmarks();
 
-    // Apply trial mode filter
-    const isTrialMode = options?.maxBookmarks !== undefined;
+    if (rawBookmarks.length === 0) {
+      await sendProgress({
+        type: "error",
+        current: 0,
+        total: 0,
+        error: "No bookmarks found",
+      });
+      return true;
+    }
+
+    const totalCount = rawBookmarks.length;
+
+    // Determine if trial mode
+    const isTrialMode = options?.maxBookmarks !== undefined && options.maxBookmarks < totalCount;
     state.isTrialMode = isTrialMode;
-    
-    if (isTrialMode && options!.maxBookmarks! < bookmarks.length) {
-      bookmarks = selectRandomBookmarks(bookmarks, options!.maxBookmarks!);
-    }
 
-    state.total = bookmarks.length;
+    // Select bookmarks for processing
+    let bookmarksToProcess: RawBookmark[];
+    let trialInfo: TrialInfo | undefined;
 
-    // Send initial progress with trial mode info
     if (isTrialMode) {
-      sendProgress({
-        type: 'progress',
-        current: 0,
-        total: bookmarks.length,
-        currentUrl: `Trial mode: Processing ${bookmarks.length} of ${totalCount} bookmarks`,
-        isTrialMode: true,
-      });
+      bookmarksToProcess = selectRandomBookmarks(rawBookmarks, options!.maxBookmarks!);
+      trialInfo = {
+        folderName: generateTrialFolderName(options!.maxBookmarks!),
+        processedCount: bookmarksToProcess.length,
+        totalCount,
+      };
     } else {
-      sendProgress({
-        type: 'progress',
+      bookmarksToProcess = rawBookmarks;
+    }
+
+    const total = bookmarksToProcess.length;
+
+    // Load checkpoint to see if we can resume
+    const checkpoint = await loadCheckpoint();
+
+    // ===== PHASE 1: FETCH TO STORAGE =====
+    // ... existing fetch logic, but use bookmarksToProcess instead of rawBookmarks ...
+
+    // Update progress messages to include trial mode info
+    if (isTrialMode) {
+      await sendProgress({
+        type: "progress",
         current: 0,
-        total: bookmarks.length,
-        currentUrl: 'Starting...',
+        total,
+        currentUrl: `Trial mode: Processing ${total} of ${totalCount} bookmarks`,
+        isTrialMode: true,
+        trialInfo,
       });
     }
 
-    // ... rest of processing ...
+    // ===== PHASE 2: CATEGORIZE AND ORGANIZE =====
+    // ... existing categorization logic ...
 
     // Pass folder name to organizer
-    const folderName = isTrialMode ? 'Trial' : 'Organized';
-    await organizeBookmarks(categorized, deadlinks, unreachable, folderName);
+    const folderName = isTrialMode && trialInfo 
+      ? trialInfo.folderName 
+      : '📁Organized';
+    
+    const organizeResult = await organizeBookmarks(
+      categorizeResult.bookmarks,
+      deadlinks,
+      unreachable,
+      dedupeResult.duplicatesMerged,
+      folderName,
+    );
 
-    // ... completion handling ...
+    // Clear storage and checkpoint
+    await clearAll();
+
+    // Send completion with trial info
+    await sendProgress({
+      type: "complete",
+      current: total,
+      total,
+      stats: organizeResult.stats,
+      isTrialMode,
+      trialInfo,
+    });
+
+    return true;
+  } catch (error) {
+    // ... error handling ...
+  } finally {
+    state.isRunning = false;
+    state.shouldAbort = false;
+    state.isTrialMode = false;
   }
 }
 ```
@@ -744,12 +997,12 @@ Expected: PASS
 
 ```bash
 git add src/types/index.ts src/background/index.ts src/background/index.integration.test.ts
-git commit -m "feat: implement trial mode in runOrganization"
+git commit -m "feat: implement trial mode in runOrganization with timestamped folders"
 ```
 
 ---
 
-### Task 9: Update Message Handler for Trial Mode
+### Task 10: Update Message Handler for Trial Mode
 
 **Files:**
 - Modify: `src/background/index.ts`
@@ -830,7 +1083,7 @@ git commit -m "feat: pass maxBookmarks option through message handler"
 
 ## Phase 3: Frontend - UI (Day 2)
 
-### Task 10: Add Trial Input to Popup HTML
+### Task 11: Add Trial Input to Popup HTML
 
 **Files:**
 - Modify: `src/popup/popup.html`
@@ -849,14 +1102,15 @@ Find the idle-state div and add after the status-text paragraph:
         <input 
           type="number" 
           id="trial-count" 
-          min="1" 
+          min="10"
+          max="500"
           step="1"
-          placeholder="e.g., 25" 
+          placeholder="e.g., 50" 
           class="trial-input"
         />
         <span class="trial-hint">bookmarks</span>
       </div>
-      <p class="trial-help">Leave empty to process all bookmarks</p>
+      <p class="trial-help">Leave empty to process all. Range: 10-500 (default: 50)</p>
     </div>
 ```
 
@@ -864,12 +1118,12 @@ Find the idle-state div and add after the status-text paragraph:
 
 ```bash
 git add src/popup/popup.html
-git commit -m "feat: add trial mode input to popup UI"
+git commit -m "feat: add trial mode input to popup UI with validation hints"
 ```
 
 ---
 
-### Task 11: Style Trial Input
+### Task 12: Style Trial Input
 
 **Files:**
 - Modify: `src/popup/styles.css`
@@ -908,6 +1162,10 @@ Add to `src/popup/styles.css`:
   box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
 }
 
+.trial-input:invalid {
+  border-color: var(--error-color, #d32f2f);
+}
+
 .trial-hint {
   color: var(--text-secondary, #666);
   font-size: 13px;
@@ -920,18 +1178,24 @@ Add to `src/popup/styles.css`:
   color: var(--text-secondary, #666);
   font-style: italic;
 }
+
+.trial-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--error-color, #d32f2f);
+}
 ```
 
 - [ ] **Step 2: Commit**
 
 ```bash
 git add src/popup/styles.css
-git commit -m "feat: add styles for trial mode input"
+git commit -m "feat: add styles for trial mode input with validation states"
 ```
 
 ---
 
-### Task 12: Add Trial Input to PopupElements
+### Task 13: Add Trial Input to PopupElements
 
 **Files:**
 - Modify: `src/popup/index.ts`
@@ -943,13 +1207,15 @@ Add to `src/popup/index.test.ts`:
 
 ```typescript
 describe('trial input elements', () => {
-  it('includes trialCount element in PopupElements', () => {
+  it('includes trialCount element in PopupElements', async () => {
     const { PopupElements } = await import('../popup/index');
     const elements: PopupElements = {
       // ... existing elements ...
       trialCount: createMockElement() as HTMLInputElement,
+      trialError: createMockElement() as HTMLElement,
     };
     expect(elements.trialCount).toBeDefined();
+    expect(elements.trialError).toBeDefined();
   });
 });
 ```
@@ -984,6 +1250,7 @@ export interface PopupElements {
   resultsList: HTMLElement;
   errorMessage: HTMLElement;
   trialCount: HTMLInputElement;  // NEW
+  trialError: HTMLElement;       // NEW
 }
 ```
 
@@ -1010,6 +1277,7 @@ export function getElements(): PopupElements {
       resultsList: document.getElementById('results-list')!,
       errorMessage: document.getElementById('error-message')!,
       trialCount: document.getElementById('trial-count')! as HTMLInputElement,  // NEW
+      trialError: document.getElementById('trial-error')!,  // NEW (create in HTML)
     };
   }
   return elements;
@@ -1025,12 +1293,12 @@ Expected: PASS
 
 ```bash
 git add src/popup/index.ts src/popup/index.test.ts
-git commit -m "feat: add trialCount to PopupElements"
+git commit -m "feat: add trialCount and trialError to PopupElements"
 ```
 
 ---
 
-### Task 13: Implement validateTrialCount Function
+### Task 14: Implement validateTrialCount Function
 
 **Files:**
 - Modify: `src/popup/index.ts`
@@ -1047,24 +1315,50 @@ describe('validateTrialCount', () => {
     expect(validateTrialCount(null, 100)).toEqual({ valid: true });
   });
 
-  it('accepts valid count', async () => {
+  it('accepts valid count within range', async () => {
     const { validateTrialCount } = await import('../popup/index');
     expect(validateTrialCount(50, 100)).toEqual({ valid: true });
   });
 
-  it('rejects count < 1', async () => {
+  it('accepts minimum (10)', async () => {
     const { validateTrialCount } = await import('../popup/index');
-    expect(validateTrialCount(0, 100)).toEqual({
+    expect(validateTrialCount(10, 100)).toEqual({ valid: true });
+  });
+
+  it('accepts maximum (500)', async () => {
+    const { validateTrialCount } = await import('../popup/index');
+    expect(validateTrialCount(500, 1000)).toEqual({ valid: true });
+  });
+
+  it('rejects count below minimum', async () => {
+    const { validateTrialCount } = await import('../popup/index');
+    expect(validateTrialCount(5, 100)).toEqual({
       valid: false,
-      error: 'Minimum 1 bookmark'
+      error: 'Minimum 10 bookmarks'
     });
   });
 
-  it('rejects negative count', async () => {
+  it('rejects count below minimum (edge case: 9)', async () => {
     const { validateTrialCount } = await import('../popup/index');
-    expect(validateTrialCount(-5, 100)).toEqual({
+    expect(validateTrialCount(9, 100)).toEqual({
       valid: false,
-      error: 'Minimum 1 bookmark'
+      error: 'Minimum 10 bookmarks'
+    });
+  });
+
+  it('rejects count above maximum', async () => {
+    const { validateTrialCount } = await import('../popup/index');
+    expect(validateTrialCount(600, 1000)).toEqual({
+      valid: false,
+      error: 'Maximum 500 bookmarks'
+    });
+  });
+
+  it('rejects count above maximum (edge case: 501)', async () => {
+    const { validateTrialCount } = await import('../popup/index');
+    expect(validateTrialCount(501, 1000)).toEqual({
+      valid: false,
+      error: 'Maximum 500 bookmarks'
     });
   });
 
@@ -1073,6 +1367,14 @@ describe('validateTrialCount', () => {
     expect(validateTrialCount(150, 100)).toEqual({
       valid: false,
       error: 'Cannot exceed 100 bookmarks'
+    });
+  });
+
+  it('rejects negative count', async () => {
+    const { validateTrialCount } = await import('../popup/index');
+    expect(validateTrialCount(-5, 100)).toEqual({
+      valid: false,
+      error: 'Minimum 10 bookmarks'
     });
   });
 });
@@ -1088,6 +1390,10 @@ Expected: FAIL with "validateTrialCount is not defined"
 Add to `src/popup/index.ts` (after showStatusMessage):
 
 ```typescript
+// Import constants from background
+const TRIAL_MIN_BOOKMARKS = 10;
+const TRIAL_MAX_BOOKMARKS = 500;
+
 /**
  * Validate trial count input
  */
@@ -1099,8 +1405,12 @@ export function validateTrialCount(
     return { valid: true };  // Empty = process all
   }
 
-  if (count < 1) {
-    return { valid: false, error: 'Minimum 1 bookmark' };
+  if (count < TRIAL_MIN_BOOKMARKS) {
+    return { valid: false, error: `Minimum ${TRIAL_MIN_BOOKMARKS} bookmarks` };
+  }
+
+  if (count > TRIAL_MAX_BOOKMARKS) {
+    return { valid: false, error: `Maximum ${TRIAL_MAX_BOOKMARKS} bookmarks` };
   }
 
   if (count > totalCount) {
@@ -1120,12 +1430,12 @@ Expected: PASS
 
 ```bash
 git add src/popup/index.ts src/popup/index.test.ts
-git commit -m "feat: implement validateTrialCount function"
+git commit -m "feat: implement validateTrialCount with min 10, max 500 limits"
 ```
 
 ---
 
-### Task 14: Implement getTrialCount Function
+### Task 15: Implement getTrialCount Function
 
 **Files:**
 - Modify: `src/popup/index.ts`
@@ -1150,9 +1460,9 @@ describe('getTrialCount', () => {
     const { getTrialCount, setElements } = await import('../popup/index');
     setElements(mockElements);
     
-    mockElements.trialCount.value = '25';
+    mockElements.trialCount.value = '50';
     
-    expect(getTrialCount()).toBe(25);
+    expect(getTrialCount()).toBe(50);
   });
 
   it('returns null for non-numeric input', async () => {
@@ -1168,9 +1478,9 @@ describe('getTrialCount', () => {
     const { getTrialCount, setElements } = await import('../popup/index');
     setElements(mockElements);
     
-    mockElements.trialCount.value = '25.7';
+    mockElements.trialCount.value = '50.7';
     
-    expect(getTrialCount()).toBe(25);
+    expect(getTrialCount()).toBe(50);
   });
 });
 ```
@@ -1215,7 +1525,7 @@ git commit -m "feat: implement getTrialCount function"
 
 ---
 
-### Task 15: Modify startOrganization for Trial Mode
+### Task 16: Modify startOrganization for Trial Mode
 
 **Files:**
 - Modify: `src/popup/index.ts`
@@ -1227,7 +1537,7 @@ Add to `src/popup/index.integration.test.ts`:
 
 ```typescript
 describe('startOrganization trial mode', () => {
-  it('shows error for invalid trial count', async () => {
+  it('shows error for count below minimum', async () => {
     const mockSendMessage = vi.fn();
     
     vi.stubGlobal('chrome', {
@@ -1238,16 +1548,36 @@ describe('startOrganization trial mode', () => {
     const { startOrganization, setElements } = await import('../popup/index');
     setElements(mockElements);
     
-    mockElements.trialCount.value = '0';
+    mockElements.trialCount.value = '5';
     await startOrganization();
 
-    expect(mockElements.bookmarkCount.textContent).toContain('Minimum 1 bookmark');
+    expect(mockElements.bookmarkCount.textContent).toContain('Minimum 10');
     expect(mockSendMessage).not.toHaveBeenCalled();
 
     vi.unstubAllGlobals();
   });
 
-  it('sends maxBookmarks when trial count is set', async () => {
+  it('shows error for count above maximum', async () => {
+    const mockSendMessage = vi.fn();
+    
+    vi.stubGlobal('chrome', {
+      runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+      bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+    });
+
+    const { startOrganization, setElements } = await import('../popup/index');
+    setElements(mockElements);
+    
+    mockElements.trialCount.value = '600';
+    await startOrganization();
+
+    expect(mockElements.bookmarkCount.textContent).toContain('Maximum 500');
+    expect(mockSendMessage).not.toHaveBeenCalled();
+
+    vi.unstubAllGlobals();
+  });
+
+  it('sends maxBookmarks when trial count is valid', async () => {
     const mockSendMessage = vi.fn().mockResolvedValue({ started: true });
     const mockGetTree = vi.fn().mockResolvedValue([{
       id: '0',
@@ -1267,11 +1597,11 @@ describe('startOrganization trial mode', () => {
     const { startOrganization, setElements } = await import('../popup/index');
     setElements(mockElements);
     
-    mockElements.trialCount.value = '25';
+    mockElements.trialCount.value = '50';
     await startOrganization();
 
     expect(mockSendMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ type: 'START_ORGANIZE', maxBookmarks: 25 })
+      expect.objectContaining({ type: 'START_ORGANIZE', maxBookmarks: 50 })
     );
 
     vi.unstubAllGlobals();
@@ -1282,7 +1612,7 @@ describe('startOrganization trial mode', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm test src/popup/index.integration.test.ts`
-Expected: FAIL with "maxBookmarks not sent" or "Expected 'Minimum 1 bookmark'"
+Expected: FAIL with "maxBookmarks not sent" or "Expected 'Minimum 10'"
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1337,7 +1667,7 @@ git commit -m "feat: add trial mode validation and message passing to startOrgan
 
 ---
 
-### Task 16: Update handleProgressMessage for Trial Mode
+### Task 17: Update handleProgressMessage for Trial Mode
 
 **Files:**
 - Modify: `src/popup/index.ts`
@@ -1358,11 +1688,16 @@ describe('handleProgressMessage trial mode', () => {
       current: 5,
       total: 25,
       isTrialMode: true,
+      trialInfo: {
+        folderName: '📁Organized (Trial 25) - 2026-05-14',
+        processedCount: 25,
+        totalCount: 100,
+      },
     };
 
     handleProgressMessage(message);
 
-    expect(mockElements.progressCount.textContent).toBe('Trial: 5 of 25');
+    expect(mockElements.progressCount.textContent).toBe('Trial: 5 of 25 (of 100 total)');
   });
 
   it('shows trial folder hint on completion', async () => {
@@ -1380,6 +1715,11 @@ describe('handleProgressMessage trial mode', () => {
       current: 25,
       total: 25,
       isTrialMode: true,
+      trialInfo: {
+        folderName: '📁Organized (Trial 25) - 2026-05-14',
+        processedCount: 25,
+        totalCount: 100,
+      },
       stats: {
         processed: 25,
         duplicatesMerged: 0,
@@ -1391,7 +1731,7 @@ describe('handleProgressMessage trial mode', () => {
 
     handleProgressMessage(message);
 
-    expect(mockFolderHint.textContent).toBe('Check 🧪Trial folder');
+    expect(mockFolderHint.textContent).toBe('Check 📁Organized (Trial 25) - 2026-05-14');
 
     vi.unstubAllGlobals();
   });
@@ -1401,7 +1741,7 @@ describe('handleProgressMessage trial mode', () => {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `pnpm test src/popup/index.test.ts`
-Expected: FAIL with "Expected 'Trial: 5 of 25'"
+Expected: FAIL with "Expected 'Trial: 5 of 25"
 
 - [ ] **Step 3: Write minimal implementation**
 
@@ -1415,9 +1755,9 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
     updateProgress(message.current, message.total, message.currentUrl);
 
     // Update UI for trial mode
-    if (message.isTrialMode) {
+    if (message.isTrialMode && message.trialInfo) {
       const els = getElements();
-      els.progressCount.textContent = `Trial: ${message.current} of ${message.total}`;
+      els.progressCount.textContent = `Trial: ${message.current} of ${message.total} (of ${message.trialInfo.totalCount} total)`;
     }
 
     return true;
@@ -1426,10 +1766,10 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
     showState('complete');
 
     // Update completion message for trial mode
-    if (message.isTrialMode) {
+    if (message.isTrialMode && message.trialInfo) {
       const folderHint = document.querySelector('.folder-hint');
       if (folderHint) {
-        folderHint.textContent = 'Check 🧪Trial folder';
+        folderHint.textContent = `Check ${message.trialInfo.folderName}`;
       }
     }
 
@@ -1457,19 +1797,19 @@ Expected: PASS
 
 ```bash
 git add src/popup/index.ts src/popup/index.test.ts
-git commit -m "feat: update progress and completion messages for trial mode"
+git commit -m "feat: update progress and completion messages for trial mode with folder name"
 ```
 
 ---
 
 ## Phase 4: Testing & Documentation (Day 3)
 
-### Task 17: Run Full Test Suite
+### Task 18: Run Full Test Suite
 
 - [ ] **Step 1: Run all tests**
 
 Run: `pnpm test`
-Expected: All tests pass (280+ existing + new tests)
+Expected: All tests pass (existing + new trial mode tests)
 
 - [ ] **Step 2: Run tests with coverage**
 
@@ -1483,7 +1823,7 @@ Expected: Build succeeds with no errors
 
 ---
 
-### Task 18: Update Documentation
+### Task 19: Update Documentation
 
 **Files:**
 - Modify: `CLAUDE.md`
@@ -1494,7 +1834,7 @@ Expected: Build succeeds with no errors
 Add to Features table:
 
 ```markdown
-| **Trial mode** | Process random subset of N bookmarks for testing |
+| **Trial mode** | Process random subset (10-500) of bookmarks for testing, results saved to timestamped folder |
 ```
 
 - [ ] **Step 2: Update USAGE.md**
@@ -1506,38 +1846,49 @@ Add section:
 
 Test the organization workflow with a small subset before processing all bookmarks:
 
-1. **Enter trial count**: In the popup, enter a number (e.g., 25) in the trial input field
-2. **Click "Organize Bookmarks"**: Processes only 25 randomly selected bookmarks
-3. **Check results**: Review the `🧪Trial/` folder in "Other Bookmarks"
-4. **Run full mode**: Leave input empty to process all bookmarks to `📁Organized/`
+1. **Enter trial count**: In the popup, enter a number (10-500) in the trial input field
+2. **Click "Organize Bookmarks"**: Processes only the specified number of randomly selected bookmarks
+3. **Check results**: Review the timestamped folder, e.g., `📁Organized (Trial 50) - 2026-05-14/`
+4. **Run multiple trials**: Each trial creates a new timestamped folder
+5. **Run full mode**: Leave input empty to process all bookmarks to `📁Organized/`
 
 **Trial mode benefits:**
 - Quick validation of categorization quality
 - Test workflow before committing to full processing
-- Results in separate folder to avoid confusion
+- Multiple trials can coexist with timestamp-based naming
+- Full run creates separate clean `📁Organized/` folder
+
+**Limits:**
+- Minimum: 10 bookmarks
+- Maximum: 500 bookmarks
+- Default: 50 bookmarks
 ```
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add CLAUDE.md USAGE.md
-git commit -m "docs: update documentation for trial mode feature"
+git commit -m "docs: update documentation for trial mode feature with timestamped folders"
 ```
 
 ---
 
-### Task 19: Final Verification
+### Task 20: Final Verification
 
 - [ ] **Step 1: Manual testing**
 
 1. Load extension in Chrome
 2. Enter trial count (e.g., 25)
 3. Click "Organize Bookmarks"
-4. Verify progress shows "Trial: X of 25"
-5. Verify completion message references `🧪Trial` folder
+4. Verify progress shows "Trial: X of 25 (of N total)"
+5. Verify completion message references `📁Organized (Trial 25) - YYYY-MM-DD` folder
 6. Verify folder contains ~25 bookmarks
-7. Click "Clear All Data"
-8. Verify both `📁Organized/` and `🧪Trial/` are deleted
+7. Run another trial with different count
+8. Verify both trial folders exist with different timestamps
+9. Run full mode (empty input)
+10. Verify clean `📁Organized/` folder is created
+11. Click "Clear All Data"
+12. Verify only `📁Organized/` is deleted, trial folders preserved
 
 - [ ] **Step 2: Create final commit**
 
@@ -1546,10 +1897,10 @@ git add -A
 git commit -m "feat: complete trial mode implementation
 
 - Add random bookmark selection using Fisher-Yates shuffle
-- Support custom folder names (🧪Trial/ vs 📁Organized/)
-- Add trial input UI with validation
-- Update progress messages for trial mode
-- Clear both folders on reset
+- Support timestamped trial folders: 📁Organized (Trial N) - YYYY-MM-DD
+- Add trial input UI with validation (min 10, max 500, default 50)
+- Update progress messages for trial mode with total count
+- Preserve trial folders on reset, clear only main folder
 - Add comprehensive tests for all new functionality"
 ```
 
@@ -1557,15 +1908,16 @@ git commit -m "feat: complete trial mode implementation
 
 ## Success Criteria
 
-- [ ] User can enter a number and process only that many bookmarks
+- [ ] User can enter a number (10-500) and process only that many bookmarks
 - [ ] Random selection is uniform (verified by statistical tests)
-- [ ] Results appear in `🧪Trial/` folder
-- [ ] Progress shows "Trial: X of Y"
-- [ ] Completion message references correct folder
-- [ ] Reset clears both `📁Trial/` and `📁Organized/`
+- [ ] Results appear in timestamped `📁Organized (Trial N) - YYYY-MM-DD/` folder
+- [ ] Progress shows "Trial: X of Y (of Z total)"
+- [ ] Completion message references correct folder name with timestamp
+- [ ] Multiple trials can coexist with different timestamps
+- [ ] Reset clears only `📁Organized/`, preserves trial folders
 - [ ] Empty input processes all bookmarks (existing behavior)
 - [ ] Invalid input shows error and prevents start
-- [ ] All tests pass (280+ existing + new tests)
+- [ ] All tests pass
 - [ ] No performance regression for full mode
 - [ ] Documentation updated
 
@@ -1578,3 +1930,4 @@ git commit -m "feat: complete trial mode implementation
 - Frequent commits after each task
 - No placeholders - all code is complete and ready to implement
 - Tests use real code where possible, mocks only for Chrome APIs
+- Trial folder naming format: `📁Organized (Trial N) - YYYY-MM-DD`
