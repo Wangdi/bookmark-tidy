@@ -179,6 +179,21 @@ export function validateTrialCount(
 }
 
 /**
+ * Get trial count from input
+ */
+export function getTrialCount(): number | null {
+  const els = getElements();
+  const value = els.trialCount.value.trim();
+
+  if (!value) {
+    return null;  // Empty = process all
+  }
+
+  const count = parseInt(value, 10);
+  return isNaN(count) ? null : count;
+}
+
+/**
  * Count bookmarks in tree (pure function for testability)
  */
 export function countBookmarksInTree(tree: chrome.bookmarks.BookmarkTreeNode[]): number {

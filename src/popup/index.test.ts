@@ -1056,6 +1056,44 @@ describe('popup', () => {
     });
   });
 
+  describe('getTrialCount', () => {
+    it('returns null for empty input', async () => {
+      const { getTrialCount, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.trialCount.value = '';
+
+      expect(getTrialCount()).toBeNull();
+    });
+
+    it('returns number for valid input', async () => {
+      const { getTrialCount, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.trialCount.value = '50';
+
+      expect(getTrialCount()).toBe(50);
+    });
+
+    it('returns null for non-numeric input', async () => {
+      const { getTrialCount, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.trialCount.value = 'abc';
+
+      expect(getTrialCount()).toBeNull();
+    });
+
+    it('parses integer from decimal', async () => {
+      const { getTrialCount, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.trialCount.value = '50.7';
+
+      expect(getTrialCount()).toBe(50);
+    });
+  });
+
 describe('showStatusMessage', () => {
     it('shows temporary status message that disappears after 3 seconds', async () => {
       vi.useFakeTimers();
