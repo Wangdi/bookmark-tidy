@@ -65,6 +65,7 @@ Two-phase pipeline for handling 2000+ bookmarks:
 | Sub-categories | Auto-generated when category >10 bookmarks |
 | Crash recovery | IndexedDB checkpointing, resume on restart |
 | **Trial mode** | Process random subset (10-500) of bookmarks for testing, results saved to timestamped folder |
+| **Background notifications** | Chrome notifications when job completes (popup not focused) |
 
 ## Key Design Decisions
 

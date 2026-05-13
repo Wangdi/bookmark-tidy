@@ -107,6 +107,25 @@ Test the organization workflow with a small subset before processing all bookmar
 - Maximum: 500 bookmarks
 - Default: 50 bookmarks
 
+## Background Notifications
+
+Get notified when bookmark organization completes, even if you close the popup:
+
+1. **Enable notifications**: Toggle is on by default in the popup
+2. **Start organization**: Click "Organize Bookmarks"
+3. **Close popup**: Feel free to close the popup and do other work
+4. **Get notified**: When complete, you'll see a notification with summary
+
+**Notification shows:**
+- Total bookmarks processed
+- Categories created
+- Deadlinks found
+- Duplicates merged
+
+**Preferences:**
+- Toggle notifications on/off in the popup
+- Setting is saved automatically
+
 ## Troubleshooting
 
 | Issue | Solution |
