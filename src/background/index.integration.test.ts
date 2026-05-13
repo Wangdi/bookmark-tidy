@@ -26,6 +26,21 @@ vi.stubGlobal('chrome', {
   },
 });
 
+// Mock IndexedDB storage module
+const mockStoredBookmarks: Array<{ id: string; url: string; title: string; meta: object; headings: string[]; status: string }> = [];
+
+vi.mock('../lib/storage', () => ({
+  storeFetched: vi.fn(async (bookmarks: unknown[]) => {
+    mockStoredBookmarks.push(...(bookmarks as Array<{ id: string; url: string; title: string; meta: object; headings: string[]; status: string }>));
+  }),
+  loadAllFetched: vi.fn(async () => mockStoredBookmarks),
+  clearAll: vi.fn(async () => {
+    mockStoredBookmarks.length = 0;
+  }),
+  saveCheckpoint: vi.fn(async () => {}),
+  loadCheckpoint: vi.fn(async () => null),
+}));
+
 // Mock modules
 vi.mock('../modules/fetcher', () => ({
   fetchBookmarks: vi.fn(async (bookmarks, options) => ({
@@ -38,6 +53,12 @@ vi.mock('../modules/fetcher', () => ({
     deadlinks: [],
     unreachable: [],
   })),
+  fetchBookmark: vi.fn(async (b: { id: string; url: string; title: string }) => ({
+    ...b,
+    meta: {},
+    headings: [],
+    status: 'ok',
+  })),
 }));
 
 vi.mock('../modules/deduper', () => ({
@@ -49,6 +70,13 @@ vi.mock('../modules/deduper', () => ({
 
 vi.mock('../modules/categorizer', () => ({
   categorizeBookmarks: vi.fn((bookmarks) => ({
+    bookmarks: bookmarks.map((b: { id: string; url: string; title: string }) => ({
+      ...b,
+      category: 'General',
+    })),
+    categoryNames: ['General'],
+  })),
+  categorizeBookmarksSparse: vi.fn((bookmarks) => ({
     bookmarks: bookmarks.map((b: { id: string; url: string; title: string }) => ({
       ...b,
       category: 'General',
@@ -74,6 +102,7 @@ describe('background integration tests', () => {
   beforeEach(() => {
     resetState();
     vi.clearAllMocks();
+    mockStoredBookmarks.length = 0;  // Clear stored bookmarks between tests
 
     // Default mock responses
     mockGetTree.mockResolvedValue([
@@ -260,16 +289,17 @@ describe('background integration tests', () => {
     });
 
     it('handles cancellation', async () => {
-      // Mock fetchBookmarks to set shouldAbort during execution
+      // Mock fetchBookmark to set shouldAbort during execution
       // This simulates the user clicking cancel while fetch is in progress
-      const { fetchBookmarks } = await import('../modules/fetcher');
-      vi.mocked(fetchBookmarks).mockImplementationOnce(async (bookmarks) => {
+      const { fetchBookmark } = await import('../modules/fetcher');
+      vi.mocked(fetchBookmark).mockImplementationOnce(async (b) => {
         // Simulate cancel happening during fetch
         state.shouldAbort = true;
         return {
-          bookmarks: [],
-          deadlinks: [],
-          unreachable: [],
+          ...b,
+          meta: {},
+          headings: [],
+          status: 'ok' as const,
         };
       });
 
@@ -280,6 +310,73 @@ describe('background integration tests', () => {
         expect.objectContaining({
           type: 'error',
           error: 'Operation cancelled',
+        })
+      );
+    });
+
+    it('handles cancellation between batches', async () => {
+      // Create enough bookmarks for multiple batches (> 10)
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: Array(15).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        },
+      ]);
+
+      // Set abort before the second batch iteration
+      let batchCount = 0;
+      const { fetchBookmark } = await import('../modules/fetcher');
+      vi.mocked(fetchBookmark).mockImplementation(async (b) => {
+        batchCount++;
+        if (batchCount > 10) {
+          // After first batch of 10, abort
+          state.shouldAbort = true;
+        }
+        return {
+          ...b,
+          meta: {},
+          headings: [],
+          status: 'ok' as const,
+        };
+      });
+
+      await runOrganization();
+
+      // Should send cancelled error
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          error: 'Operation cancelled',
+        })
+      );
+    });
+
+    it('saves checkpoint with pendingIds during fetch', async () => {
+      // Create enough bookmarks for multiple batches
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: Array(15).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        },
+      ]);
+
+      await runOrganization();
+
+      // Verify saveCheckpoint was called with pendingIds
+      const { saveCheckpoint } = await import('../lib/storage');
+      expect(vi.mocked(saveCheckpoint)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pendingIds: expect.any(Array),
         })
       );
     });
