@@ -1,19 +1,23 @@
 # Bookmark Tidy - Specification
 
-This is the technical specification for the Bookmark Tidy Chrome extension.
+Technical specification for the Bookmark Tidy Chrome extension.
 
 ## Overview
 
-A Chrome extension that organizes bookmarks by:
-1. Merging duplicate bookmarks (normalized URL matching)
-2. Removing deadlink bookmarks
-3. Categorizing using TF-IDF + K-means clustering
+Organizes bookmarks by:
+1. Fetching and validating each URL (deadlink/unreachable detection)
+2. Merging duplicate bookmarks (normalized URL matching)
+3. Categorizing using sparse TF-IDF + K-means clustering
 4. Creating `📁Organized/` folder for user review
 
 ## Data Pipeline
 
 ```
-RawBookmark[] → Fetcher → ProcessedBookmark[] → Deduper → ProcessedBookmark[] → Categorizer → CategorizedBookmark[] → Organizer → Chrome Bookmarks
+Phase 1: Fetch → Store
+  RawBookmark[] → Fetcher (batch 10) → ProcessedBookmark[] → IndexedDB
+
+Phase 2: Load → Categorize → Organize
+  IndexedDB → ProcessedBookmark[] → Deduper → CategorizedBookmark[] → Organizer → Chrome Bookmarks
 ```
 
 ## Types
@@ -36,25 +40,55 @@ interface CategorizedBookmark extends ProcessedBookmark {
   category: string;
   subCategory?: string;
 }
+
+interface SparseVector {
+  indices: number[];  // Term indices with non-zero values
+  values: number[];   // TF-IDF values
+}
+
+interface FetchCheckpoint {
+  id: 'current';
+  phase: 'fetching' | 'categorizing' | 'organizing' | 'complete';
+  totalBookmarks: number;
+  fetchedIds: string[];
+  pendingIds: string[];
+  startedAt: number;
+  lastUpdated: number;
+}
 ```
 
 ## Module Specifications
 
-### 1. Fetcher
+### 1. Storage (`src/lib/storage.ts`)
 
-**Input:** `RawBookmark[]`
-**Output:** `{ bookmarks: ProcessedBookmark[], deadlinks: ProcessedBookmark[], unreachable: ProcessedBookmark[] }`
+IndexedDB wrapper with two object stores:
+
+| Store | Key | Content |
+|-------|-----|---------|
+| `fetched` | `id` | ProcessedBookmark objects |
+| `checkpoint` | `'current'` | FetchCheckpoint state |
+
+**Operations:**
+- `storeFetched(bookmarks)` - Store fetched results
+- `loadAllFetched()` - Load all for categorization
+- `getFetchedCount()` - Count stored bookmarks
+- `clearFetched()` / `clearCheckpoint()` / `clearAll()` - Cleanup
+- `saveCheckpoint()` / `loadCheckpoint()` - Crash recovery
+
+### 2. Fetcher (`src/modules/fetcher.ts`)
+
+**Input:** `RawBookmark` (single)
+**Output:** `ProcessedBookmark`
 
 **Process:**
-- Fetch each URL with 30s timeout
+- Fetch URL with 30s timeout
 - Extract: `<title>`, `<meta description>`, `<meta og:title>`, `<meta keywords>`, `<h1>-<h6>`
 - Classify status:
   - `ok` - Successful fetch, valid content
-  - `deadlink` - 404, 410, DNS failure (definitively gone)
-  - `unreachable` - Timeout, 5xx, network error (might be temporary)
-- Rate limit: 5 concurrent, 500ms between batches
+  - `deadlink` - 404, 410, DNS failure
+  - `unreachable` - Timeout, 5xx, network error
 
-### 2. Deduper
+### 3. Deduper (`src/modules/deduper.ts`)
 
 **Input:** `ProcessedBookmark[]`
 **Output:** `{ bookmarks: ProcessedBookmark[], duplicatesMerged: number }`
@@ -67,93 +101,95 @@ interface CategorizedBookmark extends ProcessedBookmark {
 5. Sort query params alphabetically
 6. Remove tracking params: `utm_*`, `ref`, `source`, `fbclid`, `gclid`
 
-**Deduplication:**
-- Group by normalized URL
-- Keep longest title that doesn't look like a URL
-- Discard duplicates
+**Title Selection (when duplicates found):**
+1. If one title is URL-like, keep the other (real title)
+2. If both are URL-like or both aren't, keep the longer title
 
-### 3. Categorizer
+### 4. Categorizer (`src/modules/categorizer.ts`)
 
 **Input:** `ProcessedBookmark[]`
-**Output:** `CategorizedBookmark[]`
+**Output:** `{ bookmarks: CategorizedBookmark[], categoryNames: string[] }`
 
 **Process:**
 1. Build corpus: title (2x weight) + description + ogTitle + keywords (2x weight) + headings
-2. TF-IDF vectorization (tokenize, remove stop words, compute TF-IDF)
-3. Determine cluster count: `k = min(15, max(3, sqrt(n/2)))`
-4. K-means clustering (k-means++ init, max 100 iterations)
-5. Generate category names:
-   - Get top TF-IDF terms from cluster centroid
-   - Use 1 word if unique across clusters, else 2 words
-   - Capitalize first letter
-6. Sub-categories: If cluster >10 bookmarks, re-cluster with `k = max(2, n/8)`
+2. Tokenize: lowercase, remove punctuation, filter stop words and short words
+3. Build sparse TF-IDF vectors (only non-zero values, threshold > 0.001)
+4. Determine cluster count: `k = min(30, max(3, sqrt(n/2)))`
+5. K-means clustering with sparse cosine distance (max 100 iterations)
+6. Generate category names: 1 word if unique, 2 words if not, capitalize, truncate at 50 chars
+7. Sub-categories: If cluster >10 bookmarks, re-cluster with `k = max(2, n/8)`
 
-### 4. Organizer
+**Sparse vs Dense vectors:**
+
+| Metric | Dense | Sparse |
+|--------|-------|--------|
+| Memory (2000 bookmarks) | ~65 MB | ~6 MB |
+| Non-zero ratio | 100% | ~5% |
+| Distance calculation | All dimensions | Non-zero only |
+
+### 5. Organizer (`src/modules/organizer.ts`)
 
 **Input:** `CategorizedBookmark[]`, deadlinks, unreachable
 **Output:** Chrome bookmark tree
 
 **Process:**
 1. Delete existing `📁Organized/` folder
-2. Create `📁Organized/` in "Other Bookmarks"
+2. Create `📁Organized/` in "Other Bookmarks" (fallback: "Bookmarks Bar")
 3. For each category:
-   - If has sub-categories: create category folder → sub-category folders → bookmarks
-   - Else: create category folder → bookmarks
-4. If deadlinks: create `⚠ Deadlinks/` folder with bookmarks
-5. If unreachable: create `⚠ Unreachable/` folder with bookmarks
+   - If has sub-categories: category folder → sub-category folders → bookmarks
+   - Else: category folder → bookmarks
+4. Deadlinks → `⚠ Deadlinks/` (title includes error)
+5. Unreachable → `⚠ Unreachable/` (title includes error)
+6. Bookmark creation in parallel batches of 10
 
-## Output Structure
+## Background Orchestration (`src/background/index.ts`)
 
 ```
-📁Organized/
-├── Development/
-│   ├── Javascript/
-│   │   └── React Docs
-│   └── Git/
-│       └── GitHub Tutorial
-├── News/
-│   ├── BBC
-│   └── Reuters
-├── ⚠ Deadlinks/
-│   └── old-site.com (404)
-└── ⚠ Unreachable/
-    └── slow-server.com (timeout)
+FETCH_BATCH_SIZE = 10
+SPARSE_THRESHOLD = 500  (use sparse vectors when bookmarks > 500)
 ```
 
-## UI States
+**Phase 1 - Fetch:**
+- Load checkpoint (resume support)
+- Fetch in batches of 10 concurrent
+- Store each batch to IndexedDB
+- Save checkpoint after each batch
+- Check shouldAbort between batches
 
-| State | Display |
-|-------|---------|
-| Idle | Title, "Organize Bookmarks" button, bookmark count |
-| Processing | Progress bar, current URL, cancel button |
-| Complete | Results stats, "Done" button |
-| Error | Error message, "Try Again" button |
+**Phase 2 - Categorize:**
+- Load all from IndexedDB
+- Dedupe → Categorize (sparse if >500, dense otherwise) → Organize
+- Clear IndexedDB and checkpoint on completion
 
 ## Error Handling
 
 | Scenario | Handling |
 |----------|----------|
 | No bookmarks | Show "No bookmarks found" error |
-| All fail | Create empty `📁Organized/` |
-| User cancels | Stop after current batch |
-| Invalid URL | Mark as unreachable |
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `ml-kmeans` | ^7.0.0 | K-means clustering |
-| (custom) | - | TF-IDF implementation in `src/utils/tfidf.ts` |
+| User cancels | Check shouldAbort between batches, send "Operation cancelled" |
+| Crash/restart | Resume from IndexedDB checkpoint |
+| Chrome terminates SW | Checkpoint persists; resume on next run |
 
 ## Chrome Permissions
 
 - `bookmarks` - Read/write bookmarks
 - `host_permissions: ["<all_urls>"]` - Fetch any URL (bypass CORS)
 
-## Future: Enhanced Content Extraction
+## Known Constraints
 
-For better categorization, implement hidden tab + Readability.js:
-- Open bookmarks in hidden tabs
-- Extract full article content
-- Provides 200-1000+ words vs 50-200 with meta+headings
-- Trade-off: slower, more resource-intensive
+- Service worker cannot use DOM APIs directly (use DOMParser on fetched HTML)
+- Chrome bookmarks API is async - always await
+- Fetch timeout: 30 seconds
+- IndexedDB quota: no practical limit
+
+## Constants
+
+| Constant | Value | Location |
+|----------|-------|----------|
+| `MIN_CATEGORIES` | 3 | categorizer.ts |
+| `MAX_CATEGORIES` | 30 | categorizer.ts |
+| `SUB_CATEGORY_THRESHOLD` | 10 | categorizer.ts |
+| `MAX_CATEGORY_NAME_LENGTH` | 50 | categorizer.ts |
+| `FETCH_BATCH_SIZE` | 10 | background/index.ts |
+| `SPARSE_THRESHOLD` | 500 | background/index.ts |
+| `CREATE_BATCH_SIZE` | 10 | organizer.ts |
