@@ -10,6 +10,93 @@ import {
   generateTrialFolderName,
 } from '../background/index';
 
+// Mock Chrome APIs for handleMessage tests
+const mockGetTree = vi.fn().mockResolvedValue([]);
+const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+const mockStorageSyncGet = vi.fn().mockResolvedValue({});
+const mockConnect = vi.fn();
+
+vi.stubGlobal('chrome', {
+  bookmarks: {
+    getTree: mockGetTree,
+  },
+  runtime: {
+    sendMessage: mockSendMessage,
+    connect: mockConnect,
+    onMessage: {
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+    },
+  },
+  storage: {
+    sync: {
+      get: mockStorageSyncGet,
+    },
+  },
+  notifications: {
+    create: vi.fn().mockResolvedValue('notification-id'),
+    clear: vi.fn().mockResolvedValue(true),
+    onClicked: { addListener: vi.fn() },
+  },
+  action: {
+    openPopup: vi.fn().mockRejectedValue(new Error('Popup not available')),
+  },
+  tabs: {
+    create: vi.fn().mockResolvedValue({}),
+  },
+});
+
+// Mock storage module
+vi.mock('../lib/storage', () => ({
+  storeFetched: vi.fn(async () => {}),
+  loadAllFetched: vi.fn(async () => []),
+  clearAll: vi.fn(async () => {}),
+  saveCheckpoint: vi.fn(async () => {}),
+  loadCheckpoint: vi.fn(async () => null),
+}));
+
+// Mock modules that runOrganization needs
+vi.mock('../modules/fetcher', () => ({
+  fetchBookmark: vi.fn(async (b: { id: string; url: string; title: string }) => ({
+    ...b,
+    meta: {},
+    headings: [],
+    status: 'ok',
+  })),
+}));
+
+vi.mock('../modules/deduper', () => ({
+  dedupeBookmarks: vi.fn((bookmarks) => ({
+    bookmarks,
+    duplicatesMerged: 0,
+  })),
+}));
+
+vi.mock('../modules/categorizer', () => ({
+  categorizeBookmarks: vi.fn((bookmarks) => ({
+    bookmarks: [],
+    categoryNames: [],
+  })),
+  categorizeBookmarksSparse: vi.fn((bookmarks) => ({
+    bookmarks: [],
+    categoryNames: [],
+  })),
+}));
+
+vi.mock('../modules/organizer', () => ({
+  organizeBookmarks: vi.fn(async () => ({
+    success: true,
+    stats: {
+      processed: 0,
+      duplicatesMerged: 0,
+      deadlinks: 0,
+      unreachable: 0,
+      categories: 0,
+    },
+  })),
+  clearOrganizedFolder: vi.fn(async () => {}),
+}));
+
 // Helper to create a mock bookmark node
 function createMockBookmark(id: string, title: string, url: string, parentId?: string): chrome.bookmarks.BookmarkTreeNode {
   return { id, title, url, parentId, syncing: false };
@@ -166,6 +253,13 @@ describe('selectRandomBookmarks', () => {
 describe('background unit tests', () => {
   beforeEach(() => {
     resetState();
+    vi.clearAllMocks();
+    mockGetTree.mockResolvedValue([]);
+    mockSendMessage.mockResolvedValue(undefined);
+    mockStorageSyncGet.mockResolvedValue({});
+    mockConnect.mockReturnValue({
+      disconnect: vi.fn(),
+    });
   });
 
   afterEach(() => {

@@ -500,13 +500,40 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
       isTrialMode,
       trialInfo,
     });
+
+    // Send notification if popup not focused and notifications enabled
+    const popupFocused = await isPopupFocused();
+    const notificationPrefs = await getNotificationPreferences();
+
+    if (!popupFocused && notificationPrefs.enabled !== false) {
+      await sendNotification({
+        type: 'success',
+        title: 'Bookmark Tidy - Organization Complete',
+        message: 'Successfully organized your bookmarks!',
+        stats: organizeResult.stats,
+      });
+    }
   } catch (error) {
+    const errorMessage = (error as Error).message;
     await sendProgress({
       type: "error",
       current: 0,
       total: 0,
-      error: (error as Error).message,
+      error: errorMessage,
     });
+
+    // Send notification if popup not focused and notifications enabled
+    const popupFocused = await isPopupFocused();
+    const notificationPrefs = await getNotificationPreferences();
+
+    if (!popupFocused && notificationPrefs.enabled !== false) {
+      await sendNotification({
+        type: 'error',
+        title: 'Bookmark Tidy - Organization Failed',
+        message: 'An error occurred during organization.',
+        error: errorMessage,
+      });
+    }
   } finally {
     state.isRunning = false;
     state.shouldAbort = false;

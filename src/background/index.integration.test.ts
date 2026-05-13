@@ -15,6 +15,11 @@ import {
 const mockGetTree = vi.fn();
 const mockSendMessage = vi.fn();
 const mockAddListener = vi.fn();
+const mockStorageSyncGet = vi.fn().mockResolvedValue({});
+const mockConnect = vi.fn();
+const mockNotificationsCreate = vi.fn().mockResolvedValue('notification-id');
+const mockNotificationsClear = vi.fn().mockResolvedValue(true);
+const mockNotificationsOnClicked = { addListener: vi.fn() };
 
 vi.stubGlobal('chrome', {
   bookmarks: {
@@ -22,10 +27,27 @@ vi.stubGlobal('chrome', {
   },
   runtime: {
     sendMessage: mockSendMessage,
+    connect: mockConnect,
     onMessage: {
       addListener: mockAddListener,
       removeListener: vi.fn(),
     },
+  },
+  storage: {
+    sync: {
+      get: mockStorageSyncGet,
+    },
+  },
+  notifications: {
+    create: mockNotificationsCreate,
+    clear: mockNotificationsClear,
+    onClicked: mockNotificationsOnClicked,
+  },
+  action: {
+    openPopup: vi.fn().mockRejectedValue(new Error('Popup not available')),
+  },
+  tabs: {
+    create: vi.fn().mockResolvedValue({}),
   },
 });
 
