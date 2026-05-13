@@ -64,6 +64,7 @@ Two-phase pipeline for handling 2000+ bookmarks:
 | Category naming | 1-2 words from top TF-IDF terms |
 | Sub-categories | Auto-generated when category >10 bookmarks |
 | Crash recovery | IndexedDB checkpointing, resume on restart |
+| **Trial mode** | Process random subset (10-500) of bookmarks for testing, results saved to timestamped folder |
 
 ## Key Design Decisions
 

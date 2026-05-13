@@ -86,6 +86,27 @@ pnpm test:coverage    # Tests with coverage report
     └── slow-server.com (timeout)
 ```
 
+## Trial Mode
+
+Test the organization workflow with a small subset before processing all bookmarks:
+
+1. **Enter trial count**: In the popup, enter a number (10-500) in the trial input field
+2. **Click "Organize Bookmarks"**: Processes only the specified number of randomly selected bookmarks
+3. **Check results**: Review the timestamped folder, e.g., `📁Organized (Trial 50) - 2026-05-14/`
+4. **Run multiple trials**: Each trial creates a new timestamped folder
+5. **Run full mode**: Leave input empty to process all bookmarks to `📁Organized/`
+
+**Trial mode benefits:**
+- Quick validation of categorization quality
+- Test workflow before committing to full processing
+- Multiple trials can coexist with timestamp-based naming
+- Full run creates separate clean `📁Organized/` folder
+
+**Limits:**
+- Minimum: 10 bookmarks
+- Maximum: 500 bookmarks
+- Default: 50 bookmarks
+
 ## Troubleshooting
 
 | Issue | Solution |
