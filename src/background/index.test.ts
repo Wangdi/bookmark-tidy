@@ -122,6 +122,47 @@ describe('shuffleArray', () => {
   });
 });
 
+describe('selectRandomBookmarks', () => {
+  const createBookmark = (id: string) => ({
+    id,
+    url: `https://example.com/${id}`,
+    title: `Bookmark ${id}`,
+  });
+
+  it('returns all bookmarks when count >= total', async () => {
+    const { selectRandomBookmarks } = await import('../background/index');
+    const bookmarks = [createBookmark('1'), createBookmark('2'), createBookmark('3')];
+    expect(selectRandomBookmarks(bookmarks, 5)).toHaveLength(3);
+  });
+
+  it('returns exactly N bookmarks', async () => {
+    const { selectRandomBookmarks } = await import('../background/index');
+    const bookmarks = [
+      createBookmark('1'), createBookmark('2'), createBookmark('3'),
+      createBookmark('4'), createBookmark('5')
+    ];
+    expect(selectRandomBookmarks(bookmarks, 3)).toHaveLength(3);
+  });
+
+  it('returns subset of original bookmarks', async () => {
+    const { selectRandomBookmarks } = await import('../background/index');
+    const bookmarks = [
+      createBookmark('1'), createBookmark('2'), createBookmark('3'),
+      createBookmark('4'), createBookmark('5')
+    ];
+    const selected = selectRandomBookmarks(bookmarks, 3);
+    selected.forEach(b => {
+      expect(bookmarks.find(bm => bm.id === b.id)).toBeDefined();
+    });
+  });
+
+  it('returns empty array when count is 0', async () => {
+    const { selectRandomBookmarks } = await import('../background/index');
+    const bookmarks = [createBookmark('1'), createBookmark('2')];
+    expect(selectRandomBookmarks(bookmarks, 0)).toHaveLength(0);
+  });
+});
+
 describe('background unit tests', () => {
   beforeEach(() => {
     resetState();

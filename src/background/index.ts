@@ -67,6 +67,19 @@ export function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
+ * Select N random bookmarks from pool
+ */
+export function selectRandomBookmarks<T>(
+  bookmarks: T[],
+  count: number
+): T[] {
+  if (count >= bookmarks.length) {
+    return bookmarks;
+  }
+  return shuffleArray(bookmarks).slice(0, count);
+}
+
+/**
  * Reset state (for testing)
  */
 export function resetState(): void {

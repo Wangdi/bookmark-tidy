@@ -167,3 +167,55 @@ h1 {
 .hidden {
   display: none;
 }
+
+.trial-input-group {
+  margin: 16px 0;
+  padding: 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 8px;
+}
+
+.trial-input-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.trial-input {
+  width: 80px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-color, #ddd);
+  border-radius: 4px;
+  font-size: 14px;
+  font-family: inherit;
+}
+
+.trial-input:focus {
+  outline: none;
+  border-color: var(--primary-color, #4285f4);
+  box-shadow: 0 0 0 2px rgba(66, 133, 244, 0.2);
+}
+
+.trial-input:invalid {
+  border-color: var(--error-color, #d32f2f);
+}
+
+.trial-hint {
+  color: var(--text-secondary, #666);
+  font-size: 13px;
+}
+
+.trial-help {
+  margin-top: 8px;
+  margin-bottom: 0;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  font-style: italic;
+}
+
+.trial-error {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--error-color, #d32f2f);
+}
