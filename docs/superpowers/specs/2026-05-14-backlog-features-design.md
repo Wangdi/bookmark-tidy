@@ -75,7 +75,7 @@ As a user, I want to review and adjust the automatically generated categories be
 - Pass edited structure to organizer module
 
 ### Priority
-**Medium** - Improves user control but adds complexity
+**High** - Improves user control but adds complexity
 
 ### Dependencies
 None - can be implemented independently
@@ -176,7 +176,7 @@ As a user, I want to receive a notification when bookmark organization completes
 - Handle notification click to open relevant page
 
 ### Priority
-**High** - Important UX improvement for long-running jobs
+**Low** - Important UX improvement for long-running jobs
 
 ### Dependencies
 None - can be implemented independently
@@ -216,7 +216,7 @@ As a user, I want to be taken directly to the organized bookmarks folder when th
 - Store user preference in Chrome storage sync
 
 ### Priority
-**Medium** - Quality-of-life improvement
+**Low** - Quality-of-life improvement
 
 ### Dependencies
 None - can be implemented independently
