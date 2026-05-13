@@ -68,6 +68,7 @@ function createMockElements(): PopupElements {
     errorMessage: createMockElement(),
     trialCount: createMockInput(),
     trialError: createMockElement(),
+    notificationToggle: createMockInput(),
   };
 }
 
@@ -84,6 +85,12 @@ vi.stubGlobal('chrome', {
     onMessage: {
       addListener: vi.fn(),
       removeListener: vi.fn(),
+    },
+  },
+  storage: {
+    sync: {
+      get: vi.fn().mockResolvedValue({ notificationOptions: { enabled: true } }),
+      set: vi.fn().mockResolvedValue(undefined),
     },
   },
 });
@@ -226,6 +233,8 @@ describe('popup integration', () => {
 
       expect(mockElements.startBtn.addEventListener).toHaveBeenCalled();
       expect(chrome.runtime.onMessage.addListener).toHaveBeenCalled();
+      // init calls loadNotificationPreference first, then GET_STATE
+      expect(chrome.storage.sync.get).toHaveBeenCalledWith('notificationOptions');
       expect(mockSendMessage).toHaveBeenCalledWith({ type: 'GET_STATE' });
     });
   });

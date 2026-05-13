@@ -80,6 +80,7 @@ function createMockElements(): PopupElements {
     errorMessage: createMockElement(),
     trialCount: createMockInput(),
     trialError: createMockElement(),
+    notificationToggle: createMockInput(),
   };
 }
 
@@ -425,6 +426,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -456,6 +458,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -491,6 +494,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -520,6 +524,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -546,6 +551,7 @@ describe('popup', () => {
 
       vi.stubGlobal('chrome', {
         runtime: { onMessage: { addListener: mockAddListener } },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -588,6 +594,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('window', {});
 
@@ -632,6 +639,7 @@ describe('popup', () => {
           onMessage: { addListener: mockAddListener }
         },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
 
       // Re-import to trigger auto-setup
@@ -668,6 +676,7 @@ describe('popup', () => {
           onMessage: { addListener: vi.fn() }
         },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
 
       // Re-import to trigger auto-setup
@@ -695,6 +704,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -733,6 +743,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn() },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -772,6 +783,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -805,6 +817,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -899,6 +912,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -933,6 +947,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -961,6 +976,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -993,6 +1009,7 @@ describe('popup', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -1166,6 +1183,7 @@ describe('showStatusMessage', () => {
       vi.stubGlobal('chrome', {
         runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
+        storage: { sync: { get: vi.fn().mockResolvedValue({}) } },
       });
       vi.stubGlobal('document', {
         getElementById: vi.fn().mockReturnValue(createMockElement()),
@@ -1235,6 +1253,125 @@ describe('showStatusMessage', () => {
         valid: false,
         error: 'Cannot exceed 100 bookmarks'
       });
+    });
+  });
+
+  describe('loadNotificationPreference', () => {
+    it('loads enabled preference from storage', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({
+        notificationOptions: { enabled: true }
+      });
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadNotificationPreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadNotificationPreference();
+
+      expect(mockStorageGet).toHaveBeenCalledWith('notificationOptions');
+      expect(mockElements.notificationToggle.checked).toBe(true);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('loads disabled preference from storage', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({
+        notificationOptions: { enabled: false }
+      });
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadNotificationPreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadNotificationPreference();
+
+      expect(mockElements.notificationToggle.checked).toBe(false);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('defaults to enabled when no preference stored', async () => {
+      const mockStorageGet = vi.fn().mockResolvedValue({});
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { get: mockStorageGet } },
+      });
+
+      vi.resetModules();
+      const { loadNotificationPreference, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await loadNotificationPreference();
+
+      expect(mockElements.notificationToggle.checked).toBe(true);
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('handleNotificationToggle', () => {
+    it('saves enabled state to storage', async () => {
+      vi.useFakeTimers();
+      const mockStorageSet = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { set: mockStorageSet } },
+      });
+
+      vi.resetModules();
+      const { handleNotificationToggle, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.notificationToggle.checked = true;
+
+      await handleNotificationToggle();
+
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        notificationOptions: { enabled: true }
+      });
+      expect(mockElements.bookmarkCount.textContent).toBe('✓ Notifications enabled');
+
+      vi.advanceTimersByTime(2000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+
+    it('saves disabled state to storage', async () => {
+      vi.useFakeTimers();
+      const mockStorageSet = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        storage: { sync: { set: mockStorageSet } },
+      });
+
+      vi.resetModules();
+      const { handleNotificationToggle, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.notificationToggle.checked = false;
+
+      await handleNotificationToggle();
+
+      expect(mockStorageSet).toHaveBeenCalledWith({
+        notificationOptions: { enabled: false }
+      });
+      expect(mockElements.bookmarkCount.textContent).toBe('✗ Notifications disabled');
+
+      vi.advanceTimersByTime(2000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+      vi.unstubAllGlobals();
     });
   });
 });

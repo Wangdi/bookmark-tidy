@@ -150,6 +150,34 @@ export function showStatusMessage(message: string, durationMs: number) {
   }, durationMs);
 }
 
+/**
+ * Load notification preference from storage
+ */
+export async function loadNotificationPreference(): Promise<void> {
+  const els = getElements();
+  const result = await chrome.storage.sync.get('notificationOptions');
+  const options = result.notificationOptions || { enabled: true };
+  els.notificationToggle.checked = options.enabled !== false;
+}
+
+/**
+ * Handle notification toggle change
+ */
+export async function handleNotificationToggle(): Promise<void> {
+  const els = getElements();
+  const enabled = els.notificationToggle.checked;
+
+  await chrome.storage.sync.set({
+    notificationOptions: { enabled }
+  });
+
+  // Show feedback
+  showStatusMessage(
+    enabled ? '✓ Notifications enabled' : '✗ Notifications disabled',
+    2000
+  );
+}
+
 // Trial mode constants (local copies)
 const TRIAL_MIN_BOOKMARKS = 10;
 const TRIAL_MAX_BOOKMARKS = 500;
@@ -229,6 +257,9 @@ export async function getBookmarkCount(): Promise<number> {
  * Initialize popup
  */
 export async function init() {
+  // Load notification preference
+  await loadNotificationPreference();
+
   // Get current state
   const state = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
 
@@ -400,6 +431,7 @@ export function setupEventListeners() {
   els.doneBtn.addEventListener('click', handleDone);
   els.retryBtn.addEventListener('click', handleRetry);
   els.resetBtn.addEventListener('click', handleReset);
+  els.notificationToggle.addEventListener('change', handleNotificationToggle);
 }
 
 /**
@@ -414,10 +446,10 @@ export function setupMessageListener() {
 /**
  * Setup popup - initialize everything
  */
-export function setupPopup() {
+export async function setupPopup() {
   setupEventListeners();
   setupMessageListener();
-  init();
+  await init();
 }
 
 // Auto-setup when DOM is ready (only in browser environment)
