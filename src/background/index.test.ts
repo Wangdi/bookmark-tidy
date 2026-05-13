@@ -8,13 +8,22 @@ import {
   state,
   handleMessage,
   generateTrialFolderName,
+  findFolderByTitle,
+  getUserPreferences,
+  setUserPreferences,
+  navigateToBookmarksManager,
 } from '../background/index';
 
 // Mock Chrome APIs for handleMessage tests
 const mockGetTree = vi.fn().mockResolvedValue([]);
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 const mockStorageSyncGet = vi.fn().mockResolvedValue({});
+const mockStorageSyncSet = vi.fn().mockResolvedValue(undefined);
 const mockConnect = vi.fn();
+const mockTabsQuery = vi.fn().mockResolvedValue([]);
+const mockTabsCreate = vi.fn().mockResolvedValue({});
+const mockTabsUpdate = vi.fn().mockResolvedValue({});
+const mockWindowsUpdate = vi.fn().mockResolvedValue({});
 
 vi.stubGlobal('chrome', {
   bookmarks: {
@@ -31,6 +40,7 @@ vi.stubGlobal('chrome', {
   storage: {
     sync: {
       get: mockStorageSyncGet,
+      set: mockStorageSyncSet,
     },
   },
   notifications: {
@@ -42,7 +52,12 @@ vi.stubGlobal('chrome', {
     openPopup: vi.fn().mockRejectedValue(new Error('Popup not available')),
   },
   tabs: {
-    create: vi.fn().mockResolvedValue({}),
+    create: mockTabsCreate,
+    query: mockTabsQuery,
+    update: mockTabsUpdate,
+  },
+  windows: {
+    update: mockWindowsUpdate,
   },
 });
 
@@ -257,9 +272,14 @@ describe('background unit tests', () => {
     mockGetTree.mockResolvedValue([]);
     mockSendMessage.mockResolvedValue(undefined);
     mockStorageSyncGet.mockResolvedValue({});
+    mockStorageSyncSet.mockResolvedValue(undefined);
     mockConnect.mockReturnValue({
       disconnect: vi.fn(),
     });
+    mockTabsQuery.mockResolvedValue([]);
+    mockTabsCreate.mockResolvedValue({});
+    mockTabsUpdate.mockResolvedValue({});
+    mockWindowsUpdate.mockResolvedValue({});
   });
 
   afterEach(() => {
@@ -505,5 +525,203 @@ describe('OrganizedFolderInfo type', () => {
       title: '📁Organized',
     };
     expect(info.id).toBe('123');
+  });
+});
+
+describe('findFolderByTitle', () => {
+  beforeEach(() => {
+    resetState();
+    vi.clearAllMocks();
+  });
+
+  it('returns null when folder not found', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockFolder('1', 'Other Folder', []),
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized');
+    expect(result).toBeNull();
+  });
+
+  it('finds folder by exact title match', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockFolder('1', '📁Organized', [
+          createMockBookmark('2', 'Bookmark', 'https://example.com'),
+        ]),
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized');
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('1');
+    expect(result?.title).toBe('📁Organized');
+    expect(result?.isTrial).toBe(false);
+  });
+
+  it('finds trial folder and sets isTrial flag', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockFolder('1', '📁Organized (Trial 25) - 2026-05-14', []),
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized (Trial 25) - 2026-05-14');
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('1');
+    expect(result?.isTrial).toBe(true);
+  });
+
+  it('finds folder in nested structure', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockFolder('1', 'Bookmarks Bar', [
+          createMockFolder('2', 'Other', []),
+          createMockFolder('3', '📁Organized', []),
+        ]),
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized');
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('3');
+  });
+
+  it('skips bookmarks with matching title', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockBookmark('1', '📁Organized', 'https://example.com'),
+        createMockFolder('2', '📁Organized', []),
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized');
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('2'); // Returns folder, not bookmark
+  });
+
+  it('returns first match when multiple folders exist', async () => {
+    mockGetTree.mockResolvedValue([
+      createMockFolder('0', 'Root', [
+        createMockFolder('1', '📁Organized', []),
+        createMockFolder('2', '📁Organized', []), // Duplicate
+      ]),
+    ]);
+
+    const result = await findFolderByTitle('📁Organized');
+    expect(result).not.toBeNull();
+    expect(result?.id).toBe('1'); // Returns first found
+  });
+});
+
+describe('getUserPreferences', () => {
+  beforeEach(() => {
+    resetState();
+    vi.clearAllMocks();
+  });
+
+  it('returns default preferences when none stored', async () => {
+    mockStorageSyncGet.mockResolvedValue({});
+
+    const result = await getUserPreferences();
+    expect(result).toEqual({ autoNavigate: true });
+  });
+
+  it('returns stored preferences', async () => {
+    mockStorageSyncGet.mockResolvedValue({
+      userPreferences: { autoNavigate: false },
+    });
+
+    const result = await getUserPreferences();
+    expect(result).toEqual({ autoNavigate: false });
+  });
+
+  it('handles partial preferences', async () => {
+    mockStorageSyncGet.mockResolvedValue({
+      userPreferences: {},
+    });
+
+    const result = await getUserPreferences();
+    expect(result).toEqual({});
+  });
+});
+
+describe('setUserPreferences', () => {
+  beforeEach(() => {
+    resetState();
+    vi.clearAllMocks();
+  });
+
+  it('stores preferences to sync storage', async () => {
+    const prefs: import('../types').UserPreferences = { autoNavigate: false };
+    await setUserPreferences(prefs);
+
+    expect(mockStorageSyncSet).toHaveBeenCalledWith({ userPreferences: prefs });
+  });
+
+  it('stores empty preferences', async () => {
+    await setUserPreferences({});
+
+    expect(mockStorageSyncSet).toHaveBeenCalledWith({ userPreferences: {} });
+  });
+});
+
+describe('navigateToBookmarksManager', () => {
+  beforeEach(() => {
+    resetState();
+    vi.clearAllMocks();
+  });
+
+  it('opens bookmarks page when no tab exists', async () => {
+    mockTabsQuery.mockResolvedValue([]);
+
+    await navigateToBookmarksManager();
+
+    expect(mockTabsCreate).toHaveBeenCalledWith({ url: 'chrome://bookmarks/' });
+  });
+
+  it('opens bookmarks page with folder ID', async () => {
+    mockTabsQuery.mockResolvedValue([]);
+
+    await navigateToBookmarksManager('folder-123');
+
+    expect(mockTabsCreate).toHaveBeenCalledWith({ url: 'chrome://bookmarks/#folder-123' });
+  });
+
+  it('focuses existing bookmarks tab', async () => {
+    const existingTab = { id: 5, windowId: 10 };
+    mockTabsQuery.mockResolvedValue([existingTab]);
+
+    await navigateToBookmarksManager();
+
+    expect(mockTabsUpdate).toHaveBeenCalledWith(5, { active: true });
+    expect(mockWindowsUpdate).toHaveBeenCalledWith(10, { focused: true });
+    expect(mockTabsCreate).not.toHaveBeenCalled();
+  });
+
+  it('focuses existing tab and navigates to folder', async () => {
+    const existingTab = { id: 5, windowId: 10 };
+    mockTabsQuery.mockResolvedValue([existingTab]);
+
+    await navigateToBookmarksManager('folder-123');
+
+    expect(mockTabsUpdate).toHaveBeenCalledWith(5, { active: true });
+    expect(mockWindowsUpdate).toHaveBeenCalledWith(10, { focused: true });
+    expect(mockTabsUpdate).toHaveBeenCalledWith(5, { url: 'chrome://bookmarks/#folder-123' });
+  });
+
+  it('handles multiple existing tabs (focuses first)', async () => {
+    const tabs = [
+      { id: 5, windowId: 10 },
+      { id: 7, windowId: 11 },
+    ];
+    mockTabsQuery.mockResolvedValue(tabs);
+
+    await navigateToBookmarksManager();
+
+    expect(mockTabsUpdate).toHaveBeenCalledWith(5, { active: true });
+    expect(mockWindowsUpdate).toHaveBeenCalledWith(10, { focused: true });
   });
 });

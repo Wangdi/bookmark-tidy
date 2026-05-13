@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -167,6 +167,79 @@ export async function handleNotificationClick(notificationId: string): Promise<v
 
   // Clear the notification
   await chrome.notifications.clear(notificationId);
+}
+
+/**
+ * Find a folder by title in the bookmark tree
+ */
+export async function findFolderByTitle(title: string): Promise<OrganizedFolderInfo | null> {
+  const tree = await chrome.bookmarks.getTree();
+
+  function searchFolder(node: chrome.bookmarks.BookmarkTreeNode): chrome.bookmarks.BookmarkTreeNode | null {
+    if (node.title === title && !node.url) {
+      return node;
+    }
+    for (const child of node.children || []) {
+      const found = searchFolder(child);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  for (const root of tree) {
+    for (const child of root.children || []) {
+      const found = searchFolder(child);
+      if (found) {
+        return {
+          id: found.id,
+          title: found.title,
+          isTrial: title.includes('Trial'),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get user preferences from storage
+ */
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const result = await chrome.storage.sync.get('userPreferences');
+  return result.userPreferences || { autoNavigate: true };
+}
+
+/**
+ * Set user preferences in storage
+ */
+export async function setUserPreferences(preferences: UserPreferences): Promise<void> {
+  await chrome.storage.sync.set({ userPreferences: preferences });
+}
+
+/**
+ * Navigate to bookmarks manager with optional folder focus
+ */
+export async function navigateToBookmarksManager(folderId?: string): Promise<void> {
+  const url = folderId
+    ? `chrome://bookmarks/#${folderId}`
+    : 'chrome://bookmarks/';
+
+  // Check if bookmarks tab is already open
+  const tabs = await chrome.tabs.query({ url: 'chrome://bookmarks/*' });
+
+  if (tabs.length > 0) {
+    // Focus existing tab
+    await chrome.tabs.update(tabs[0].id!, { active: true });
+    await chrome.windows.update(tabs[0].windowId!, { focused: true });
+    // Navigate to specific folder
+    if (folderId) {
+      await chrome.tabs.update(tabs[0].id!, { url });
+    }
+  } else {
+    // Open new tab
+    await chrome.tabs.create({ url });
+  }
 }
 
 /**
