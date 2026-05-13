@@ -30,6 +30,14 @@ function createMockElement(): HTMLElement {
   } as unknown as HTMLElement;
 }
 
+// Helper to create mock button element
+function createMockButton(): HTMLButtonElement {
+  return {
+    ...createMockElement(),
+    disabled: false,
+  } as unknown as HTMLButtonElement;
+}
+
 // Helper to create mock elements
 function createMockElements(): PopupElements {
   return {
@@ -37,10 +45,11 @@ function createMockElements(): PopupElements {
     processingState: createMockElement(),
     completeState: createMockElement(),
     errorState: createMockElement(),
-    startBtn: createMockElement(),
-    cancelBtn: createMockElement(),
-    doneBtn: createMockElement(),
-    retryBtn: createMockElement(),
+    startBtn: createMockButton(),
+    cancelBtn: createMockButton(),
+    doneBtn: createMockButton(),
+    retryBtn: createMockButton(),
+    resetBtn: createMockButton(),
     bookmarkCount: createMockElement(),
     progressBar: createMockElement(),
     progressText: createMockElement(),
@@ -178,6 +187,7 @@ describe('popup integration', () => {
       expect(mockElements.cancelBtn.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
       expect(mockElements.doneBtn.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
       expect(mockElements.retryBtn.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
+      expect(mockElements.resetBtn.addEventListener).toHaveBeenCalledWith('click', expect.any(Function));
     });
   });
 

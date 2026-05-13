@@ -4,7 +4,7 @@ import { RawBookmark, ProgressEvent, OrganizerState } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
-import { organizeBookmarks } from "../modules/organizer";
+import { organizeBookmarks, clearOrganizedFolder } from "../modules/organizer";
 import {
   storeFetched,
   loadAllFetched,
@@ -367,6 +367,25 @@ export function cancelOperation(): void {
 }
 
 /**
+ * Reset all storage and organized folder
+ * Clears IndexedDB data and deletes the 📁Organized folder
+ */
+export async function resetStorage(): Promise<void> {
+  // Cancel any running operation first
+  if (state.isRunning) {
+    cancelOperation();
+    // Wait briefly for operation to wind down
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+
+  // Clear IndexedDB storage
+  await clearAll();
+
+  // Delete the organized folder
+  await clearOrganizedFolder();
+}
+
+/**
  * Get current state
  */
 export function getState(): OrganizerState {
@@ -391,6 +410,13 @@ export function handleMessage(
     sendResponse({ success: true });
   } else if (message.type === "GET_STATE") {
     sendResponse(getState());
+  } else if (message.type === "RESET") {
+    resetStorage().then(() => {
+      sendResponse({ success: true });
+    }).catch((error) => {
+      sendResponse({ success: false, error: (error as Error).message });
+    });
+    return true; // Keep message channel open for async response
   }
   return true; // Keep message channel open for async response
 }

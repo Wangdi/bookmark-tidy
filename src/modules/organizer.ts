@@ -65,6 +65,13 @@ async function deleteOrganizedFolder(): Promise<void> {
 }
 
 /**
+ * Clear the organized folder (public API for reset)
+ */
+export async function clearOrganizedFolder(): Promise<void> {
+  await deleteOrganizedFolder();
+}
+
+/**
  * Get the "Other Bookmarks" folder ID (usually "1")
  */
 async function getOtherBookmarksFolderId(): Promise<string> {

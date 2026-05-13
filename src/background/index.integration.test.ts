@@ -8,6 +8,7 @@ import {
   state,
   cancelOperation,
   handleMessage,
+  resetStorage,
 } from '../background/index';
 
 // Mock Chrome APIs
@@ -98,6 +99,7 @@ vi.mock('../modules/organizer', () => ({
       categories: 1,
     },
   })),
+  clearOrganizedFolder: vi.fn(async () => {}),
 }));
 
 describe('background integration tests', () => {
@@ -622,6 +624,83 @@ describe('background integration tests', () => {
       expect(currentState.currentUrl).toBeUndefined();
       // But shouldAbort should be true (operation still winding down)
       expect(currentState.shouldAbort).toBe(true);
+    });
+  });
+
+  describe('resetStorage', () => {
+    it('clears IndexedDB storage and organized folder', async () => {
+      // Add some data to storage
+      mockStoredBookmarks.push({
+        id: '1',
+        url: 'https://example.com',
+        title: 'Test',
+        meta: {},
+        headings: [],
+        status: 'ok',
+      });
+
+      await resetStorage();
+
+      // Verify storage was cleared
+      const { clearAll } = await import('../lib/storage');
+      expect(vi.mocked(clearAll)).toHaveBeenCalled();
+
+      // Verify organized folder was cleared
+      const { clearOrganizedFolder } = await import('../modules/organizer');
+      expect(vi.mocked(clearOrganizedFolder)).toHaveBeenCalled();
+    });
+
+    it('cancels running operation before reset', async () => {
+      state.isRunning = true;
+      state.current = 5;
+      state.total = 10;
+
+      await resetStorage();
+
+      // Operation should be cancelled
+      expect(state.shouldAbort).toBe(true);
+    });
+
+    it('clears storage even when not running', async () => {
+      state.isRunning = false;
+
+      await resetStorage();
+
+      const { clearAll } = await import('../lib/storage');
+      expect(vi.mocked(clearAll)).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMessage RESET', () => {
+    it('returns success when reset completes', async () => {
+      const responses: unknown[] = [];
+      const sendResponse = (response: unknown) => {
+        responses.push(response);
+      };
+
+      handleMessage({ type: 'RESET' }, {} as chrome.runtime.MessageSender, sendResponse);
+
+      // Wait for async resetStorage to complete
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      expect(responses[0]).toEqual({ success: true });
+    });
+
+    it('returns error when reset fails', async () => {
+      const { clearAll } = await import('../lib/storage');
+      vi.mocked(clearAll).mockRejectedValueOnce(new Error('Storage error'));
+
+      const responses: unknown[] = [];
+      const sendResponse = (response: unknown) => {
+        responses.push(response);
+      };
+
+      handleMessage({ type: 'RESET' }, {} as chrome.runtime.MessageSender, sendResponse);
+
+      // Wait for async resetStorage to complete
+      await new Promise(resolve => setTimeout(resolve, 150));
+
+      expect(responses[0]).toEqual({ success: false, error: 'Storage error' });
     });
   });
 });
