@@ -2195,4 +2195,490 @@ describe('showStatusMessage', () => {
       vi.unstubAllGlobals();
     });
   });
+
+  describe('category edit handlers', () => {
+    beforeEach(() => {
+      vi.stubGlobal('prompt', vi.fn());
+      vi.stubGlobal('confirm', vi.fn());
+      vi.stubGlobal('alert', vi.fn());
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    describe('handleRenameCategory', () => {
+      it('prompts for new name and updates category', async () => {
+        vi.mocked(prompt).mockReturnValue('Programming');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories[0].name).toBe('Programming');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when category not found', async () => {
+        vi.mocked(prompt).mockReturnValue('New Name');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('non-existent');
+
+        const categories = getCategories();
+        expect(categories[0].name).toBe('Development');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when prompt is cancelled', async () => {
+        vi.mocked(prompt).mockReturnValue(null);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories[0].name).toBe('Development');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when new name is empty', async () => {
+        vi.mocked(prompt).mockReturnValue('   ');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories[0].name).toBe('Development');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('trims whitespace from new name', async () => {
+        vi.mocked(prompt).mockReturnValue('  Programming  ');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories[0].name).toBe('Programming');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('renders category tree after rename', async () => {
+        vi.mocked(prompt).mockReturnValue('Programming');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          handleRenameCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleRenameCategory('cat-1');
+
+        // renderCategoryTree should have been called (clears innerHTML)
+        expect(mockElements.categoryTree.innerHTML).toBe('');
+
+        vi.unstubAllGlobals();
+      });
+    });
+
+    describe('handleMergeCategory', () => {
+      it('merges source into target category', async () => {
+        vi.mocked(prompt).mockReturnValue('News');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-3'] },
+        ]);
+
+        handleMergeCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].name).toBe('News');
+        expect(categories[0].bookmarkIds).toEqual(['bm-3', 'bm-1', 'bm-2']);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('shows alert when no other categories exist', async () => {
+        vi.resetModules();
+        const {
+          setCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleMergeCategory('cat-1');
+
+        expect(alert).toHaveBeenCalledWith('No other categories to merge with');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('shows alert when target category not found', async () => {
+        vi.mocked(prompt).mockReturnValue('NonExistent');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-2'] },
+        ]);
+
+        handleMergeCategory('cat-1');
+
+        expect(alert).toHaveBeenCalledWith('Category not found');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when prompt is cancelled', async () => {
+        vi.mocked(prompt).mockReturnValue(null);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-2'] },
+        ]);
+
+        handleMergeCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(2);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('matches target case-insensitively', async () => {
+        vi.mocked(prompt).mockReturnValue('NEWS'); // uppercase
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-2'] }, // lowercase in category
+        ]);
+
+        handleMergeCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].name).toBe('News');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when source category not found', async () => {
+        vi.mocked(prompt).mockReturnValue('News');
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleMergeCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-2'] },
+        ]);
+
+        handleMergeCategory('non-existent');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(2);
+
+        vi.unstubAllGlobals();
+      });
+    });
+
+    describe('handleDeleteCategory', () => {
+      it('moves bookmarks to Uncategorized', async () => {
+        vi.mocked(confirm).mockReturnValue(true);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2'] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-3'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(2);
+
+        const uncategorized = categories.find(c => c.name === 'Uncategorized');
+        expect(uncategorized?.bookmarkIds).toEqual(['bm-1', 'bm-2']);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when confirm is cancelled', async () => {
+        vi.mocked(confirm).mockReturnValue(false);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].name).toBe('Development');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('appends to existing Uncategorized category', async () => {
+        vi.mocked(confirm).mockReturnValue(true);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2'] },
+          { id: 'uncategorized', name: 'Uncategorized', bookmarkIds: ['bm-3'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].bookmarkIds).toEqual(['bm-3', 'bm-1', 'bm-2']);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('creates Uncategorized if it does not exist', async () => {
+        vi.mocked(confirm).mockReturnValue(true);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].name).toBe('Uncategorized');
+        expect(categories[0].bookmarkIds).toEqual(['bm-1']);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('deletes category without creating Uncategorized when no bookmarks', async () => {
+        vi.mocked(confirm).mockReturnValue(true);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: [] },
+          { id: 'cat-2', name: 'News', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+        expect(categories[0].name).toBe('News');
+
+        vi.unstubAllGlobals();
+      });
+
+      it('does nothing when category not found', async () => {
+        vi.mocked(confirm).mockReturnValue(true);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          getCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleDeleteCategory('non-existent');
+
+        const categories = getCategories();
+        expect(categories).toHaveLength(1);
+
+        vi.unstubAllGlobals();
+      });
+
+      it('shows confirmation with category name', async () => {
+        vi.mocked(confirm).mockReturnValue(false);
+
+        vi.resetModules();
+        const {
+          setCategories,
+          handleDeleteCategory,
+          setElements: newSetElements,
+        } = await import('../popup/index');
+        newSetElements(mockElements);
+
+        setCategories([
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ]);
+
+        handleDeleteCategory('cat-1');
+
+        expect(confirm).toHaveBeenCalledWith(
+          'Delete "Development"? Bookmarks will be moved to Uncategorized.'
+        );
+
+        vi.unstubAllGlobals();
+      });
+    });
+  });
 });

@@ -7,6 +7,11 @@ import { ProgressEvent, EditedCategory } from '../types';
  */
 let elements: PopupElements | null = null;
 
+/**
+ * Current categories state for editor
+ */
+let currentCategories: EditedCategory[] = [];
+
 export interface PopupElements {
   idleState: HTMLElement;
   processingState: HTMLElement;
@@ -91,14 +96,29 @@ export function setElements(mockElements: PopupElements | null) {
 }
 
 /**
+ * Set categories (for testing and state management)
+ */
+export function setCategories(categories: EditedCategory[]) {
+  currentCategories = categories;
+}
+
+/**
+ * Get current categories
+ */
+export function getCategories(): EditedCategory[] {
+  return currentCategories;
+}
+
+/**
  * Show a specific state
  */
-export function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
+export function showState(state: 'idle' | 'processing' | 'complete' | 'error' | 'editor') {
   const els = getElements();
   els.idleState.classList.add('hidden');
   els.processingState.classList.add('hidden');
   els.completeState.classList.add('hidden');
   els.errorState.classList.add('hidden');
+  els.editorState.classList.add('hidden');
 
   switch (state) {
     case 'idle':
@@ -112,6 +132,9 @@ export function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
       break;
     case 'error':
       els.errorState.classList.remove('hidden');
+      break;
+    case 'editor':
+      els.editorState.classList.remove('hidden');
       break;
   }
 }
@@ -620,6 +643,46 @@ export function setupEventListeners() {
   els.notificationToggle.addEventListener('change', handleNotificationToggle);
   els.autoNavigateToggle.addEventListener('change', handleAutoNavigateToggle);
   els.detailsToggle.addEventListener('click', toggleDetails);
+
+  // Apply changes button
+  els.applyBtn.addEventListener('click', async () => {
+    try {
+      els.applyBtn.disabled = true;
+      els.applyBtn.textContent = 'Applying...';
+
+      await chrome.runtime.sendMessage({
+        type: 'APPLY_CATEGORY_EDIT',
+        categories: currentCategories,
+      });
+
+      // Show processing state
+      showState('processing');
+      updateProgress(0, 0, 'Applying changes...');
+    } catch (error) {
+      console.error('Failed to apply changes:', error);
+      els.applyBtn.disabled = false;
+      els.applyBtn.textContent = '✅ Apply Changes';
+    }
+  });
+
+  // Regenerate button
+  els.regenerateBtn.addEventListener('click', async () => {
+    if (!confirm('Regenerate categories? This will discard your edits.')) {
+      return;
+    }
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'REGENERATE_CATEGORIES',
+      });
+
+      // Show processing state
+      showState('processing');
+      updateProgress(0, 0, 'Regenerating categories...');
+    } catch (error) {
+      console.error('Failed to regenerate:', error);
+    }
+  });
 }
 
 /**

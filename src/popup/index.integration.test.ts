@@ -8,6 +8,8 @@ import {
   setupMessageListener,
   setupPopup,
   setElements,
+  setCategories,
+  getCategories,
   PopupElements,
 } from '../popup/index';
 
@@ -32,9 +34,16 @@ function createMockElement(): HTMLElement {
 
 // Helper to create mock button element
 function createMockButton(): HTMLButtonElement {
+  const listeners: Array<() => void> = [];
   return {
     ...createMockElement(),
     disabled: false,
+    addEventListener: vi.fn((_event: string, handler: () => void) => {
+      listeners.push(handler);
+    }),
+    click: () => {
+      listeners.forEach(handler => handler());
+    },
   } as unknown as HTMLButtonElement;
 }
 
@@ -248,6 +257,93 @@ describe('popup integration', () => {
       // init calls loadNotificationPreference first, then GET_STATE
       expect(chrome.storage.sync.get).toHaveBeenCalledWith('notificationOptions');
       expect(mockSendMessage).toHaveBeenCalledWith({ type: 'GET_STATE' });
+    });
+  });
+
+  describe('apply and regenerate buttons', () => {
+    it('apply button sends edited categories', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
+
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mockSendMessage,
+          onMessage: { addListener: vi.fn() }
+        },
+      });
+
+      setElements(mockElements);
+      setCategories([
+        { id: 'cat-1', name: 'Edited', bookmarkIds: ['bm-1'] },
+      ]);
+
+      setupEventListeners();
+
+      mockElements.applyBtn.click();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'APPLY_CATEGORY_EDIT',
+          categories: expect.arrayContaining([
+            expect.objectContaining({ name: 'Edited' }),
+          ]),
+        })
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it('regenerate button sends regenerate message', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
+
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mockSendMessage,
+          onMessage: { addListener: vi.fn() }
+        },
+      });
+
+      vi.stubGlobal('confirm', vi.fn().mockReturnValue(true));
+
+      setElements(mockElements);
+
+      setupEventListeners();
+
+      mockElements.regenerateBtn.click();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'REGENERATE_CATEGORIES' })
+      );
+
+      vi.unstubAllGlobals();
+    });
+
+    it('regenerate button does nothing if user cancels confirm', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
+
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mockSendMessage,
+          onMessage: { addListener: vi.fn() }
+        },
+      });
+
+      vi.stubGlobal('confirm', vi.fn().mockReturnValue(false));
+
+      setElements(mockElements);
+
+      setupEventListeners();
+
+      mockElements.regenerateBtn.click();
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(mockSendMessage).not.toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
     });
   });
 });
