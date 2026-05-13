@@ -12,6 +12,23 @@
     <div id="idle-state" class="state">
       <h1>📚 Bookmark Tidy</h1>
       <p class="status-text">Ready to organize bookmarks</p>
+      <!-- Trial mode input group -->
+      <div class="trial-input-group">
+        <label for="trial-count">Trial mode (optional):</label>
+        <div class="trial-input-wrapper">
+          <input
+            type="number"
+            id="trial-count"
+            min="10"
+            max="500"
+            step="1"
+            placeholder="e.g., 50"
+            class="trial-input"
+          />
+          <span class="trial-hint">bookmarks</span>
+        </div>
+        <p class="trial-help">Leave empty to process all. Range: 10-500 (default: 50)</p>
+      </div>
       <button id="start-btn" class="btn primary">Organize Bookmarks</button>
       <p id="bookmark-count" class="count-text"></p>
       <div class="divider"></div>
