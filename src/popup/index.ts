@@ -222,6 +222,65 @@ export async function handleAutoNavigateToggle(): Promise<void> {
   );
 }
 
+/**
+ * Details panel expansion state
+ */
+let detailsExpanded = false;
+
+/**
+ * Toggle details panel visibility
+ */
+export function toggleDetails(): void {
+  const els = getElements();
+  detailsExpanded = !detailsExpanded;
+
+  if (detailsExpanded) {
+    els.detailsPanel.classList.remove('hidden');
+    els.detailsToggle.textContent = 'Hide Details';
+  } else {
+    els.detailsPanel.classList.add('hidden');
+    els.detailsToggle.textContent = 'Show Details';
+  }
+}
+
+/**
+ * Update detailed metrics display
+ */
+export function updateDetailedMetrics(metrics: import('../types').DetailedMetrics): void {
+  const els = getElements();
+
+  if (metrics.fetch) {
+    els.fetchMetrics.textContent =
+      `URLs: ${metrics.fetch.totalUrls} ✓${metrics.fetch.successful} ✗${metrics.fetch.failed} ⏱${metrics.fetch.timedOut}\n` +
+      `Avg: ${metrics.fetch.averageTime}ms | Total: ${(metrics.fetch.totalTime / 1000).toFixed(1)}s`;
+  }
+
+  if (metrics.storage) {
+    els.storageMetrics.textContent =
+      `Writes: ${metrics.storage.indexedDbWrites} | Reads: ${metrics.storage.indexedDbReads}\n` +
+      `Checkpoints: ${metrics.storage.checkpointSaves} | Size: ${(metrics.storage.estimatedSize / 1024).toFixed(1)}KB`;
+  }
+
+  if (metrics.categorization) {
+    els.categorizationMetrics.textContent =
+      `Vocab: ${metrics.categorization.vocabularySize} | Dims: ${metrics.categorization.vectorDimensions}\n` +
+      `Clusters: ${metrics.categorization.clusters} | Iters: ${metrics.categorization.iterations}\n` +
+      `Time: ${metrics.categorization.convergenceTime}ms`;
+  }
+
+  if (metrics.organization) {
+    els.organizationMetrics.textContent =
+      `Folders: ${metrics.organization.foldersCreated} | Bookmarks: ${metrics.organization.bookmarksCreated}\n` +
+      `Batches: ${metrics.organization.batches} | Avg: ${metrics.organization.averageBatchTime}ms`;
+  }
+
+  if (metrics.performance) {
+    els.performanceMetrics.textContent =
+      `Elapsed: ${(metrics.performance.totalElapsed / 1000).toFixed(1)}s\n` +
+      `Avg: ${metrics.performance.averagePerBookmark}ms/bm | Mem: ${(metrics.performance.memoryEstimate / 1024 / 1024).toFixed(1)}MB`;
+  }
+}
+
 // Trial mode constants (local copies)
 const TRIAL_MIN_BOOKMARKS = 10;
 const TRIAL_MAX_BOOKMARKS = 500;
@@ -440,6 +499,11 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
       els.progressCount.textContent = `Trial: ${message.current} of ${message.total} (of ${message.trialInfo.totalCount} total)`;
     }
 
+    // Update detailed metrics if provided
+    if (message.detailedMetrics) {
+      updateDetailedMetrics(message.detailedMetrics);
+    }
+
     return true;
   } else if (message.type === 'complete') {
     showResults(message.stats);
@@ -451,6 +515,11 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
       if (folderHint) {
         folderHint.textContent = `Check ${message.trialInfo.folderName}`;
       }
+    }
+
+    // Update final detailed metrics if provided
+    if (message.detailedMetrics) {
+      updateDetailedMetrics(message.detailedMetrics);
     }
 
     return true;
@@ -479,6 +548,7 @@ export function setupEventListeners() {
   els.resetBtn.addEventListener('click', handleReset);
   els.notificationToggle.addEventListener('change', handleNotificationToggle);
   els.autoNavigateToggle.addEventListener('change', handleAutoNavigateToggle);
+  els.detailsToggle.addEventListener('click', toggleDetails);
 }
 
 /**

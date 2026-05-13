@@ -10,6 +10,8 @@ import {
   showStatusMessage,
   setElements,
   PopupElements,
+  toggleDetails,
+  updateDetailedMetrics,
 } from '../popup/index';
 import { ProgressEvent } from '../types';
 
@@ -1498,6 +1500,321 @@ describe('showStatusMessage', () => {
       expect(mockElements.bookmarkCount.textContent).toBe('');
 
       vi.useRealTimers();
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('toggleDetails', () => {
+    it('shows details panel and updates toggle text when expanding', async () => {
+      vi.resetModules();
+      const { toggleDetails, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Initial state: collapsed
+      toggleDetails();
+
+      expect(mockElements.detailsPanel.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.detailsToggle.textContent).toBe('Hide Details');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('hides details panel and updates toggle text when collapsing', async () => {
+      vi.resetModules();
+      const { toggleDetails, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Toggle twice: expand then collapse
+      toggleDetails();
+      toggleDetails();
+
+      expect(mockElements.detailsPanel.classList.add).toHaveBeenCalledWith('hidden');
+      expect(mockElements.detailsToggle.textContent).toBe('Show Details');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('toggles state correctly on repeated calls', async () => {
+      vi.resetModules();
+      const { toggleDetails, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Toggle 3 times: expand -> collapse -> expand
+      toggleDetails();
+      toggleDetails();
+      toggleDetails();
+
+      expect(mockElements.detailsPanel.classList.remove).toHaveBeenCalledTimes(2);
+      expect(mockElements.detailsPanel.classList.add).toHaveBeenCalledTimes(1);
+      expect(mockElements.detailsToggle.textContent).toBe('Hide Details');
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('updateDetailedMetrics', () => {
+    it('updates fetch metrics display', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        fetch: {
+          totalUrls: 100,
+          successful: 90,
+          failed: 8,
+          timedOut: 2,
+          averageTime: 150,
+          totalTime: 15000,
+        },
+      });
+
+      expect(mockElements.fetchMetrics.textContent).toContain('URLs: 100');
+      expect(mockElements.fetchMetrics.textContent).toContain('✓90');
+      expect(mockElements.fetchMetrics.textContent).toContain('✗8');
+      expect(mockElements.fetchMetrics.textContent).toContain('⏱2');
+      expect(mockElements.fetchMetrics.textContent).toContain('Avg: 150ms');
+      expect(mockElements.fetchMetrics.textContent).toContain('Total: 15.0s');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates storage metrics display', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        storage: {
+          indexedDbWrites: 50,
+          indexedDbReads: 25,
+          checkpointSaves: 10,
+          estimatedSize: 102400,
+        },
+      });
+
+      expect(mockElements.storageMetrics.textContent).toContain('Writes: 50');
+      expect(mockElements.storageMetrics.textContent).toContain('Reads: 25');
+      expect(mockElements.storageMetrics.textContent).toContain('Checkpoints: 10');
+      expect(mockElements.storageMetrics.textContent).toContain('Size: 100.0KB');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates categorization metrics display', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        categorization: {
+          vocabularySize: 5000,
+          vectorDimensions: 100,
+          clusters: 15,
+          iterations: 25,
+          convergenceTime: 3500,
+        },
+      });
+
+      expect(mockElements.categorizationMetrics.textContent).toContain('Vocab: 5000');
+      expect(mockElements.categorizationMetrics.textContent).toContain('Dims: 100');
+      expect(mockElements.categorizationMetrics.textContent).toContain('Clusters: 15');
+      expect(mockElements.categorizationMetrics.textContent).toContain('Iters: 25');
+      expect(mockElements.categorizationMetrics.textContent).toContain('Time: 3500ms');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates organization metrics display', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        organization: {
+          foldersCreated: 20,
+          bookmarksCreated: 150,
+          batches: 15,
+          averageBatchTime: 120,
+        },
+      });
+
+      expect(mockElements.organizationMetrics.textContent).toContain('Folders: 20');
+      expect(mockElements.organizationMetrics.textContent).toContain('Bookmarks: 150');
+      expect(mockElements.organizationMetrics.textContent).toContain('Batches: 15');
+      expect(mockElements.organizationMetrics.textContent).toContain('Avg: 120ms');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates performance metrics display', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        performance: {
+          totalElapsed: 45000,
+          averagePerBookmark: 225,
+          memoryEstimate: 6291456, // 6 MB
+        },
+      });
+
+      expect(mockElements.performanceMetrics.textContent).toContain('Elapsed: 45.0s');
+      expect(mockElements.performanceMetrics.textContent).toContain('Avg: 225ms/bm');
+      expect(mockElements.performanceMetrics.textContent).toContain('Mem: 6.0MB');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates all metrics at once', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      updateDetailedMetrics({
+        fetch: {
+          totalUrls: 100,
+          successful: 90,
+          failed: 8,
+          timedOut: 2,
+          averageTime: 150,
+          totalTime: 15000,
+        },
+        storage: {
+          indexedDbWrites: 50,
+          indexedDbReads: 25,
+          checkpointSaves: 10,
+          estimatedSize: 102400,
+        },
+        categorization: {
+          vocabularySize: 5000,
+          vectorDimensions: 100,
+          clusters: 15,
+          iterations: 25,
+          convergenceTime: 3500,
+        },
+        organization: {
+          foldersCreated: 20,
+          bookmarksCreated: 150,
+          batches: 15,
+          averageBatchTime: 120,
+        },
+        performance: {
+          totalElapsed: 45000,
+          averagePerBookmark: 225,
+          memoryEstimate: 6291456,
+        },
+      });
+
+      expect(mockElements.fetchMetrics.textContent).toContain('URLs: 100');
+      expect(mockElements.storageMetrics.textContent).toContain('Writes: 50');
+      expect(mockElements.categorizationMetrics.textContent).toContain('Vocab: 5000');
+      expect(mockElements.organizationMetrics.textContent).toContain('Folders: 20');
+      expect(mockElements.performanceMetrics.textContent).toContain('Elapsed: 45.0s');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('handles partial metrics updates', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Only update fetch metrics
+      updateDetailedMetrics({
+        fetch: {
+          totalUrls: 50,
+          successful: 45,
+          failed: 4,
+          timedOut: 1,
+          averageTime: 100,
+          totalTime: 5000,
+        },
+      });
+
+      // Fetch metrics should be updated
+      expect(mockElements.fetchMetrics.textContent).toContain('URLs: 50');
+      // Other metrics elements should not have been touched (still empty from mock creation)
+      expect(mockElements.storageMetrics.textContent).toBe('');
+      expect(mockElements.categorizationMetrics.textContent).toBe('');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('handles empty metrics object', async () => {
+      vi.resetModules();
+      const { updateDetailedMetrics, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Should not throw with empty metrics
+      expect(() => updateDetailedMetrics({})).not.toThrow();
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('handleProgressMessage with detailedMetrics', () => {
+    it('updates detailed metrics on progress message', async () => {
+      vi.resetModules();
+      const { handleProgressMessage, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 5,
+        total: 10,
+        currentUrl: 'https://example.com',
+        detailedMetrics: {
+          fetch: {
+            totalUrls: 10,
+            successful: 5,
+            failed: 0,
+            timedOut: 0,
+            averageTime: 100,
+            totalTime: 500,
+          },
+        },
+      };
+
+      const result = handleProgressMessage(message);
+
+      expect(result).toBe(true);
+      expect(mockElements.fetchMetrics.textContent).toContain('URLs: 10');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('updates detailed metrics on complete message', async () => {
+      vi.resetModules();
+      const { handleProgressMessage, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      const message: ProgressEvent = {
+        type: 'complete',
+        current: 10,
+        total: 10,
+        stats: {
+          processed: 10,
+          duplicatesMerged: 2,
+          deadlinks: 1,
+          unreachable: 0,
+          categories: 3,
+        },
+        detailedMetrics: {
+          performance: {
+            totalElapsed: 10000,
+            averagePerBookmark: 200,
+            memoryEstimate: 5242880,
+          },
+        },
+      };
+
+      const result = handleProgressMessage(message);
+
+      expect(result).toBe(true);
+      expect(mockElements.performanceMetrics.textContent).toContain('Elapsed: 10.0s');
+
       vi.unstubAllGlobals();
     });
   });
