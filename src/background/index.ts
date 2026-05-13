@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -336,6 +336,14 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
     return false;
   }
 
+  // Detailed metrics tracking
+  const metrics: DetailedMetrics = {};
+  const startTime = Date.now();
+  let fetchSuccessCount = 0;
+  let fetchFailedCount = 0;
+  let fetchTimedOutCount = 0;
+  let totalFetchTime = 0;
+
   state.isRunning = true;
   state.shouldAbort = false;
 
@@ -430,6 +438,9 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
 
         const batch = pending.slice(i, i + FETCH_BATCH_SIZE);
 
+        // Track batch timing
+        const batchStartTime = Date.now();
+
         // Create new AbortController for this batch so cancel can abort in-flight fetches
         fetchAbortController = new AbortController();
         const abortSignal = fetchAbortController.signal;
@@ -438,6 +449,21 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
         const results = await Promise.all(
           batch.map(b => fetchBookmark(b, abortSignal))
         );
+
+        // Track batch fetch time
+        const batchFetchTime = Date.now() - batchStartTime;
+        totalFetchTime += batchFetchTime;
+
+        // Track success/failure counts
+        for (const result of results) {
+          if (result.status === 'ok') {
+            fetchSuccessCount++;
+          } else if (result.status === 'deadlink') {
+            fetchFailedCount++;
+          } else if (result.status === 'unreachable') {
+            fetchTimedOutCount++;
+          }
+        }
 
         // Clear abort controller after batch completes
         fetchAbortController = null;
@@ -564,6 +590,22 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
     // Clear storage and checkpoint
     await clearAll();
 
+    // Build metrics before sending completion
+    metrics.fetch = {
+      totalUrls: total,
+      successful: fetchSuccessCount,
+      failed: fetchFailedCount,
+      timedOut: fetchTimedOutCount,
+      averageTime: total > 0 ? Math.round(totalFetchTime / total) : 0,
+      totalTime: totalFetchTime,
+    };
+
+    metrics.performance = {
+      totalElapsed: Date.now() - startTime,
+      averagePerBookmark: total > 0 ? Math.round((Date.now() - startTime) / total) : 0,
+      memoryEstimate: 0, // Could use performance.memory if available
+    };
+
     // Send completion with trial info
     await sendProgress({
       type: "complete",
@@ -572,6 +614,7 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
       stats: organizeResult.stats,
       isTrialMode,
       trialInfo,
+      detailedMetrics: metrics,
     });
 
     // Send notification if popup not focused and notifications enabled
