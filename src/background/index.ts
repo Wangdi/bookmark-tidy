@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -90,6 +90,83 @@ export function resetState(): void {
   state.total = 0;
   state.currentUrl = undefined;
   state.isTrialMode = false;
+}
+
+/**
+ * Check if popup is currently focused/connected
+ */
+export async function isPopupFocused(): Promise<boolean> {
+  try {
+    // Try to connect to popup - if it exists, it's focused
+    const port = chrome.runtime.connect({ name: 'popup-check' });
+    port.disconnect();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send Chrome notification
+ */
+export async function sendNotification(payload: NotificationPayload): Promise<string> {
+  let message = payload.message;
+
+  // Append stats if provided
+  if (payload.stats) {
+    message = `${payload.message}\n\n` +
+      `📊 ${payload.stats.processed} bookmarks processed\n` +
+      `📁 ${payload.stats.categories} categories created\n` +
+      `⚠️ ${payload.stats.deadlinks} deadlinks found\n` +
+      `🔄 ${payload.stats.duplicatesMerged} duplicates merged`;
+  }
+
+  // Append error if provided
+  if (payload.error) {
+    message = `${message}\n\n❌ Error: ${payload.error}`;
+  }
+
+  const notificationId = await chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icons/icon128.png',
+    title: payload.title,
+    message: message,
+    priority: 2,
+    requireInteraction: false,
+  });
+
+  return notificationId;
+}
+
+/**
+ * Get notification preferences from storage
+ */
+export async function getNotificationPreferences(): Promise<NotificationOptions> {
+  const result = await chrome.storage.sync.get('notificationOptions');
+  return result.notificationOptions || { enabled: true };
+}
+
+/**
+ * Set notification preferences in storage
+ */
+export async function setNotificationPreferences(options: NotificationOptions): Promise<void> {
+  await chrome.storage.sync.set({ notificationOptions: options });
+}
+
+/**
+ * Handle notification click - open popup or bookmarks page
+ */
+export async function handleNotificationClick(notificationId: string): Promise<void> {
+  try {
+    // Try to open popup (works if extension is in toolbar)
+    await chrome.action.openPopup();
+  } catch {
+    // Fallback: open bookmarks page
+    await chrome.tabs.create({ url: 'chrome://bookmarks/' });
+  }
+
+  // Clear the notification
+  await chrome.notifications.clear(notificationId);
 }
 
 /**
@@ -523,8 +600,16 @@ export function setupMessageListener(): void {
   chrome.runtime.onMessage.addListener(handleMessage);
 }
 
+/**
+ * Setup notification click listener
+ */
+export function setupNotificationListener(): void {
+  chrome.notifications.onClicked.addListener(handleNotificationClick);
+}
+
 // Auto-setup when service worker loads (only in browser environment)
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   setupMessageListener();
+  setupNotificationListener();
   console.log("Bookmark Tidy service worker started");
 }
