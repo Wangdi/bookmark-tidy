@@ -108,6 +108,7 @@ Two-phase pipeline for handling 2000+ bookmarks:
 ### Code Style
 
 - TypeScript strict mode
+- prefer pnpm over npm
 - One module per file, single responsibility
 - Pure functions preferred
 - Chrome API calls isolated to background/organizer

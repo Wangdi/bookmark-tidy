@@ -6,6 +6,7 @@ import {
   setupMessageListener,
   resetState,
   state,
+  cancelOperation,
 } from '../background/index';
 
 // Mock Chrome APIs
@@ -387,6 +388,207 @@ describe('background integration tests', () => {
       setupMessageListener();
 
       expect(mockAddListener).toHaveBeenCalled();
+    });
+  });
+
+  describe('cancelOperation', () => {
+    it('sets shouldAbort flag', () => {
+      cancelOperation();
+
+      expect(state.shouldAbort).toBe(true);
+    });
+
+    it('clears progress state immediately', () => {
+      // Set up some progress state
+      state.current = 5;
+      state.total = 10;
+      state.currentUrl = 'https://example.com';
+
+      cancelOperation();
+
+      // Progress state should be cleared immediately
+      expect(state.current).toBe(0);
+      expect(state.total).toBe(0);
+      expect(state.currentUrl).toBeUndefined();
+    });
+
+    it('clears progress state even when already aborted', () => {
+      state.shouldAbort = true;
+      state.current = 8;
+      state.total = 15;
+      state.currentUrl = 'https://test.com';
+
+      cancelOperation();
+
+      expect(state.current).toBe(0);
+      expect(state.total).toBe(0);
+      expect(state.currentUrl).toBeUndefined();
+    });
+  });
+
+  describe('cancellation DB consistency', () => {
+    it('discards partial batch results when cancelled during fetch', async () => {
+      // Create enough bookmarks for multiple batches
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: Array(25).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        },
+      ]);
+
+      // Set abort during first batch fetch
+      let fetchCount = 0;
+      const { fetchBookmark } = await import('../modules/fetcher');
+      vi.mocked(fetchBookmark).mockImplementation(async (b) => {
+        fetchCount++;
+        if (fetchCount === 5) {
+          // During first batch, set abort
+          state.shouldAbort = true;
+        }
+        return {
+          ...b,
+          meta: {},
+          headings: [],
+          status: 'ok' as const,
+        };
+      });
+
+      await runOrganization();
+
+      // Should send cancelled error
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          error: 'Operation cancelled',
+        })
+      );
+
+      // State should be cleared
+      expect(state.current).toBe(0);
+      expect(state.total).toBe(0);
+    });
+
+    it('saves checkpoint after each completed batch if not cancelled', async () => {
+      // Create enough bookmarks for multiple batches
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: Array(25).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        },
+      ]);
+
+      await runOrganization();
+
+      // Verify saveCheckpoint was called with fetchedIds
+      const { saveCheckpoint } = await import('../lib/storage');
+      expect(vi.mocked(saveCheckpoint)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          pendingIds: expect.any(Array),
+        })
+      );
+    });
+
+    it('does not save partial batch results when cancelled during batch', async () => {
+      // Create bookmarks for one batch
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: Array(10).fill(null).map((_, i) => ({
+            id: `${i + 1}`,
+            title: `Bookmark ${i}`,
+            url: `https://example${i}.com`,
+          })),
+        },
+      ]);
+
+      // Simulate cancellation happening during fetch (before batch completes)
+      const { fetchBookmark } = await import('../modules/fetcher');
+      let fetchStarted = false;
+      vi.mocked(fetchBookmark).mockImplementation(async (b) => {
+        if (!fetchStarted) {
+          fetchStarted = true;
+          // Cancel during first fetch
+          state.shouldAbort = true;
+        }
+        return {
+          ...b,
+          meta: {},
+          headings: [],
+          status: 'ok' as const,
+        };
+      });
+
+      await runOrganization();
+
+      // The batch still completes (Promise.all), but abort is detected at next iteration
+      // So the fetched bookmarks should still be stored
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'error',
+          error: 'Operation cancelled',
+        })
+      );
+    });
+
+    it('clears isRunning and shouldAbort after cancellation error', async () => {
+      mockGetTree.mockResolvedValueOnce([
+        {
+          id: '0',
+          title: 'Root',
+          children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+        },
+      ]);
+
+      const { fetchBookmark } = await import('../modules/fetcher');
+      vi.mocked(fetchBookmark).mockImplementationOnce(async (b) => {
+        state.shouldAbort = true;
+        return { ...b, meta: {}, headings: [], status: 'ok' as const };
+      });
+
+      await runOrganization();
+
+      expect(state.isRunning).toBe(false);
+      expect(state.shouldAbort).toBe(false);
+    });
+  });
+
+  describe('state consistency on popup reopen', () => {
+    it('returns cleared state after cancellation', async () => {
+      // Simulate: user starts, progress updates, user cancels, popup reopens
+      state.current = 5;
+      state.total = 10;
+      state.currentUrl = 'https://example.com';
+      state.isRunning = true;
+
+      // User cancels
+      cancelOperation();
+
+      // Popup reopens and calls getState (via GET_STATE message)
+      const currentState = {
+        isRunning: state.isRunning,
+        shouldAbort: state.shouldAbort,
+        current: state.current,
+        total: state.total,
+        currentUrl: state.currentUrl,
+      };
+
+      // State should show cleared progress
+      expect(currentState.current).toBe(0);
+      expect(currentState.total).toBe(0);
+      expect(currentState.currentUrl).toBeUndefined();
+      // But shouldAbort should be true (operation still winding down)
+      expect(currentState.shouldAbort).toBe(true);
     });
   });
 });

@@ -91,8 +91,10 @@ export function classifyError(error: Error): 'deadlink' | 'unreachable' {
 
 /**
  * Fetch a single bookmark with timeout
+ * @param bookmark - The bookmark to fetch
+ * @param signal - Optional AbortSignal for cancellation
  */
-export async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBookmark> {
+export async function fetchBookmark(bookmark: RawBookmark, signal?: AbortSignal): Promise<ProcessedBookmark> {
   // Validate URL first
   if (!isValidUrl(bookmark.url)) {
     return {
@@ -118,6 +120,10 @@ export async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBoo
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), FETCH_TIMEOUT);
 
+  // Forward external abort signal to our controller
+  const abortHandler = () => controller.abort();
+  signal?.addEventListener('abort', abortHandler);
+
   try {
     const response = await fetch(bookmark.url, {
       method: 'GET',
@@ -126,6 +132,7 @@ export async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBoo
     });
 
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortHandler);
 
     // Check status code
     if (response.status >= 400 && response.status < 500) {
@@ -162,6 +169,7 @@ export async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBoo
     };
   } catch (error) {
     clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abortHandler);
 
     const status = classifyError(error as Error);
     return {

@@ -325,6 +325,86 @@ it('handles cancellation between batches', async () => {
 });
 ```
 
+### `cancelOperation` 详细测试
+
+```typescript
+// 取消时立即清除进度状态
+it('clears progress state immediately', () => {
+  state.current = 5;
+  state.total = 10;
+  state.currentUrl = 'https://example.com';
+
+  cancelOperation();
+
+  // 进度状态应该立即被清除
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+  expect(state.currentUrl).toBeUndefined();
+  expect(state.shouldAbort).toBe(true);
+});
+
+// 即使已经取消，再次取消也会清除进度状态
+it('clears progress state even when already aborted', () => {
+  state.shouldAbort = true;
+  state.current = 8;
+  state.total = 15;
+
+  cancelOperation();
+
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+});
+```
+
+### 取消 DB 一致性测试
+
+```typescript
+// 取消时丢弃部分批次结果
+it('discards partial batch results when cancelled during fetch', async () => {
+  // 创建 25 个书签（3 批次）
+  mockGetTree.mockResolvedValueOnce([...]);
+
+  // 在第一批获取期间设置取消
+  vi.mocked(fetchBookmark).mockImplementation(async (b) => {
+    fetchCount++;
+    if (fetchCount === 5) {
+      state.shouldAbort = true;  // 取消
+    }
+    return { ...b, status: 'ok' };
+  });
+
+  await runOrganization();
+
+  // 应该发送取消错误，状态应该被清除
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'error', error: 'Operation cancelled' })
+  );
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+});
+```
+
+### 弹窗重开状态一致性测试
+
+```typescript
+// 取消后弹窗重开显示正确状态
+it('returns cleared state after cancellation', async () => {
+  state.current = 5;
+  state.total = 10;
+  state.currentUrl = 'https://example.com';
+  state.isRunning = true;
+
+  cancelOperation();
+
+  // 弹窗重开时获取的状态应该显示已清除的进度
+  const currentState = { ...state };
+  expect(currentState.current).toBe(0);
+  expect(currentState.total).toBe(0);
+  expect(currentState.currentUrl).toBeUndefined();
+  expect(currentState.shouldAbort).toBe(true);
+});
+```
+
 ---
 
 ## 6. `src/popup/index.test.ts` - 弹出窗口 UI 测试

@@ -77,16 +77,21 @@ IndexedDB wrapper with two object stores:
 
 ### 2. Fetcher (`src/modules/fetcher.ts`)
 
-**Input:** `RawBookmark` (single)
+**Input:** `RawBookmark` (single), optional `AbortSignal`
 **Output:** `ProcessedBookmark`
 
 **Process:**
-- Fetch URL with 30s timeout
+- Fetch URL with 30s timeout (combined with external abort signal if provided)
 - Extract: `<title>`, `<meta description>`, `<meta og:title>`, `<meta keywords>`, `<h1>-<h6>`
 - Classify status:
   - `ok` - Successful fetch, valid content
   - `deadlink` - 404, 410, DNS failure
-  - `unreachable` - Timeout, 5xx, network error
+  - `unreachable` - Timeout, 5xx, network error, or aborted
+
+**Abort Handling:**
+- Accepts optional `AbortSignal` parameter for immediate cancellation
+- Combines external signal with internal timeout signal
+- If aborted, returns `unreachable` status with "aborted" error
 
 ### 3. Deduper (`src/modules/deduper.ts`)
 
@@ -166,9 +171,31 @@ SPARSE_THRESHOLD = 500  (use sparse vectors when bookmarks > 500)
 | Scenario | Handling |
 |----------|----------|
 | No bookmarks | Show "No bookmarks found" error |
-| User cancels | Check shouldAbort between batches, send "Operation cancelled" |
+| User cancels | Immediate abort via AbortController, discard in-flight results, clear progress state, send "Operation cancelled" |
 | Crash/restart | Resume from IndexedDB checkpoint |
 | Chrome terminates SW | Checkpoint persists; resume on next run |
+
+### Cancellation Behavior
+
+When user clicks cancel:
+
+1. **Immediate abort**: `cancelOperation()` aborts any in-flight fetch operations via `AbortController`
+2. **Progress state cleared**: `current`, `total`, `currentUrl` are set to 0/0/undefined immediately
+3. **Partial results discarded**: If cancelled during a batch, that batch's results are NOT saved to IndexedDB
+4. **Consistent popup state**: On popup close/reopen, state shows cleared progress (0/0) even if background is still winding down
+
+```typescript
+// cancelOperation() implementation
+export function cancelOperation(): void {
+  state.shouldAbort = true;
+  if (fetchAbortController) {
+    fetchAbortController.abort();  // Abort in-flight fetches
+  }
+  state.current = 0;
+  state.total = 0;
+  state.currentUrl = undefined;
+}
+```
 
 ## Chrome Permissions
 
