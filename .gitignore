@@ -35,3 +35,6 @@ Thumbs.db
 
 # agent/project memory
 .claude/
+
+# git worktrees (parallel development)
+.worktrees/
