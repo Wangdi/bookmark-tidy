@@ -106,6 +106,26 @@ describe('deduper', () => {
       expect(result.bookmarks[0].title).toBe('https://example.com/page1');
     });
 
+    it('keeps longer title when both look like URLs and second is longer', () => {
+      const bookmarks = [
+        createBookmark('https://example.com', 'https://example.com/a', '1'),
+        createBookmark('https://example.com', 'https://example.com/longer-path', '2'),
+      ];
+      const result = dedupeBookmarks(bookmarks);
+
+      expect(result.bookmarks[0].title).toBe('https://example.com/longer-path');
+    });
+
+    it('keeps longer title when neither looks like URL and second is longer', () => {
+      const bookmarks = [
+        createBookmark('https://example.com', 'Short', '1'),
+        createBookmark('https://example.com', 'Much Longer Title', '2'),
+      ];
+      const result = dedupeBookmarks(bookmarks);
+
+      expect(result.bookmarks[0].title).toBe('Much Longer Title');
+    });
+
     it('preserves bookmarks with different URLs', () => {
       const bookmarks = [
         createBookmark('https://example1.com', 'Site 1', '1'),

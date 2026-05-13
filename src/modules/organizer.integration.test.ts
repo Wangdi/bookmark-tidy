@@ -204,6 +204,43 @@ describe('organizer integration', () => {
       expect(result.stats.categories).toBe(1);
     });
 
+    it('handles bookmarks with mixed sub-categories and none', async () => {
+      // Mix of bookmarks with and without sub-categories in the same category
+      const bookmarks = [
+        createCategorizedBookmark('https://js.com', 'JS Site', 'Technology', 'JavaScript'),
+        createCategorizedBookmark('https://python.com', 'Python Site', 'Technology', 'Python'),
+        createCategorizedBookmark('https://tech.com', 'Tech Site', 'Technology'), // No sub-category
+      ];
+
+      const result = await organizeBookmarks(bookmarks, [], [], 0);
+
+      expect(result.success).toBe(true);
+      // Verify all bookmarks were created
+      expect(mockCreatedBookmarks.length).toBe(3);
+    });
+
+    it('falls back to Bookmarks Bar when Other Bookmarks not found', async () => {
+      // Remove "Other Bookmarks" from tree
+      mockBookmarkTree[0].children = [
+        createMockNode('1', 'Bookmarks Bar', { children: [] }),
+        // No "Other Bookmarks" folder
+      ];
+
+      const bookmarks = [
+        createCategorizedBookmark('https://example.com', 'Site', 'Technology'),
+      ];
+
+      const result = await organizeBookmarks(bookmarks, [], [], 0);
+
+      expect(result.success).toBe(true);
+      // The organized folder should be created under Bookmarks Bar (id '1')
+      const organizedFolder = mockCreatedFolders.find(
+        f => f.title === ORGANIZED_FOLDER_NAME
+      );
+      expect(organizedFolder).toBeDefined();
+      expect(organizedFolder?.parentId).toBe('1');
+    });
+
     it('deletes existing organized folder before creating new one', async () => {
       // Add existing organized folder to tree
       mockBookmarkTree[0].children![1].children = [
@@ -240,6 +277,36 @@ describe('organizer integration', () => {
       expect(result.stats.unreachable).toBe(1);
       expect(result.stats.categories).toBe(2);
       expect(result.stats.duplicatesMerged).toBe(2);
+    });
+
+    it('creates bookmarks in parallel batches', async () => {
+      // Create more than 10 bookmarks to test batch creation
+      const bookmarks = Array(25).fill(null).map((_, i) =>
+        createCategorizedBookmark(`https://tech${i}.com`, `Tech Site ${i}`, 'Technology')
+      );
+
+      const result = await organizeBookmarks(bookmarks, [], [], 0);
+
+      expect(result.success).toBe(true);
+      // All bookmarks should be created
+      const bookmarkCreates = mockCreatedBookmarks.filter(b => b.url?.includes('tech'));
+      expect(bookmarkCreates.length).toBe(25);
+    });
+
+    it('handles large number of bookmarks efficiently', async () => {
+      // Create 100 bookmarks to verify parallel processing works
+      const bookmarks = Array(100).fill(null).map((_, i) =>
+        createCategorizedBookmark(`https://site${i}.com`, `Site ${i}`, `Category ${i % 5}`)
+      );
+
+      const startTime = Date.now();
+      const result = await organizeBookmarks(bookmarks, [], [], 0);
+      const duration = Date.now() - startTime;
+
+      expect(result.success).toBe(true);
+      expect(result.stats.processed).toBe(100);
+      // Parallel creation should be reasonably fast even with many bookmarks
+      expect(duration).toBeLessThan(5000); // Should complete in under 5 seconds
     });
   });
 });

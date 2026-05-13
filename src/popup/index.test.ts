@@ -378,6 +378,236 @@ describe('popup', () => {
     });
   });
 
+  describe('startOrganization', () => {
+    it('shows processing state and sends start message', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { startOrganization, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await startOrganization();
+
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'START_ORGANIZE' });
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('cancelOrganization', () => {
+    it('sends cancel message and shows idle state', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: mockGetTree },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { cancelOrganization, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await cancelOrganization();
+
+      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'CANCEL' });
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('handleRetry', () => {
+    it('calls startOrganization', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue(undefined);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleRetry, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await handleRetry();
+
+      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'START_ORGANIZE' });
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('setupMessageListener', () => {
+    it('registers listener that handles progress messages', async () => {
+      const mockAddListener = vi.fn();
+
+      vi.stubGlobal('chrome', {
+        runtime: { onMessage: { addListener: mockAddListener } },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { setupMessageListener, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      setupMessageListener();
+
+      expect(mockAddListener).toHaveBeenCalled();
+
+      // Get the callback and test it - the callback calls handleProgressMessage
+      const callback = mockAddListener.mock.calls[0][0];
+      callback({ type: 'progress', current: 5, total: 10 });
+
+      // Verify the progress was updated
+      expect(mockElements.progressBar.style.width).toBe('50%');
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('getElements', () => {
+    it('lazy initializes elements from DOM when not set', async () => {
+      // Reset elements to null to trigger lazy init
+      setElements(null);
+
+      // Mock DOM elements
+      const mockElement = createMockElement();
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(mockElement),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('chrome', {
+        runtime: { onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('window', {});
+
+      // Re-import to get fresh module state
+      vi.resetModules();
+      const { getElements, setElements: newSetElements } = await import('../popup/index');
+
+      const result = getElements();
+
+      expect(result).toBeDefined();
+      expect(result.idleState).toBe(mockElement);
+      expect(document.getElementById).toHaveBeenCalledWith('idle-state');
+
+      // Reset for other tests
+      newSetElements(null);
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('auto-setup', () => {
+    it('sets up popup when DOM is already ready', async () => {
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [],
+      }]);
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: false,
+        shouldAbort: false,
+      });
+      const mockAddListener = vi.fn();
+
+      vi.stubGlobal('window', {});
+      vi.stubGlobal('document', {
+        readyState: 'complete',
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mockSendMessage,
+          onMessage: { addListener: mockAddListener }
+        },
+        bookmarks: { getTree: mockGetTree },
+      });
+
+      // Re-import to trigger auto-setup
+      vi.resetModules();
+      await import('../popup/index');
+
+      // The auto-setup should have registered message listener
+      expect(mockAddListener).toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
+    it('sets up popup on DOMContentLoaded when DOM not ready', async () => {
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [],
+      }]);
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: false,
+        shouldAbort: false,
+      });
+      const mockAddEventListener = vi.fn();
+
+      vi.stubGlobal('window', {});
+      vi.stubGlobal('document', {
+        readyState: 'loading',
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        addEventListener: mockAddEventListener,
+      });
+      vi.stubGlobal('chrome', {
+        runtime: {
+          sendMessage: mockSendMessage,
+          onMessage: { addListener: vi.fn() }
+        },
+        bookmarks: { getTree: mockGetTree },
+      });
+
+      // Re-import to trigger auto-setup
+      vi.resetModules();
+      await import('../popup/index');
+
+      // Should have registered DOMContentLoaded listener
+      expect(mockAddEventListener).toHaveBeenCalledWith('DOMContentLoaded', expect.any(Function));
+
+      vi.unstubAllGlobals();
+    });
+  });
+
   describe('init', () => {
     it('shows processing state and restores progress when isRunning and total > 0', async () => {
       const mockSendMessage = vi.fn().mockResolvedValue({
@@ -390,12 +620,22 @@ describe('popup', () => {
       const mockGetTree = vi.fn();
 
       vi.stubGlobal('chrome', {
-        runtime: { sendMessage: mockSendMessage },
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
       });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'complete',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
 
       // Import init dynamically to use the mocked chrome API
-      const { init } = await import('../popup/index');
+      vi.resetModules();
+      const { init, setElements: newSetElements } = await import('../popup/index');
+
+      // Set mock elements for this module instance
+      newSetElements(mockElements);
 
       await init();
 
@@ -418,11 +658,19 @@ describe('popup', () => {
       });
 
       vi.stubGlobal('chrome', {
-        runtime: { sendMessage: mockSendMessage },
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: vi.fn() },
       });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'complete',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
 
-      const { init } = await import('../popup/index');
+      vi.resetModules();
+      const { init, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
 
       await init();
 
@@ -449,11 +697,19 @@ describe('popup', () => {
       }]);
 
       vi.stubGlobal('chrome', {
-        runtime: { sendMessage: mockSendMessage },
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
         bookmarks: { getTree: mockGetTree },
       });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'complete',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
 
-      const { init } = await import('../popup/index');
+      vi.resetModules();
+      const { init, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
 
       await init();
 
