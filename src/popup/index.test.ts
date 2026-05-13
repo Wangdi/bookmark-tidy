@@ -350,6 +350,24 @@ describe('popup', () => {
       expect(result).toBe(false);
     });
 
+    it('does NOT show error state for "Operation cancelled" error', () => {
+      // When user intentionally cancels, we should NOT show error state
+      const message: ProgressEvent = {
+        type: 'error',
+        current: 0,
+        total: 0,
+        error: 'Operation cancelled',
+      };
+
+      const result = handleProgressMessage(message);
+
+      // Should return true (message was handled) but NOT show error state
+      expect(result).toBe(true);
+      expect(mockElements.errorState.classList.remove).not.toHaveBeenCalledWith('hidden');
+      // Should show idle state instead
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+    });
+
     it('handles progress message without URL', () => {
       const message: ProgressEvent = {
         type: 'progress',

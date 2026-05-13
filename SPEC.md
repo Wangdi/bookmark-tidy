@@ -183,6 +183,7 @@ When user clicks cancel:
 2. **Progress state cleared**: `current`, `total`, `currentUrl` are set to 0/0/undefined immediately
 3. **Partial results discarded**: If cancelled during a batch, that batch's results are NOT saved to IndexedDB
 4. **Consistent popup state**: On popup close/reopen, state shows cleared progress (0/0) even if background is still winding down
+5. **Popup shows idle state**: When background sends "Operation cancelled" error, popup shows idle state instead of error state (user intentionally cancelled)
 
 ```typescript
 // cancelOperation() implementation
@@ -194,6 +195,12 @@ export function cancelOperation(): void {
   state.current = 0;
   state.total = 0;
   state.currentUrl = undefined;
+}
+
+// Popup handles "Operation cancelled" specially
+if (message.type === 'error' && message.error === 'Operation cancelled') {
+  showState('idle');  // Not an error - user cancelled intentionally
+  return true;
 }
 ```
 

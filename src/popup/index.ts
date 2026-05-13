@@ -216,6 +216,11 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
     showState('complete');
     return true;
   } else if (message.type === 'error') {
+    // Don't show error state for user-initiated cancellation
+    if (message.error === 'Operation cancelled') {
+      showState('idle');
+      return true;
+    }
     getElements().errorMessage.textContent = message.error || 'Unknown error';
     showState('error');
     return true;
