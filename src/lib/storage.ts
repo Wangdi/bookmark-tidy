@@ -1,17 +1,19 @@
 /**
  * IndexedDB storage layer for bookmark-tidy
  *
- * Uses a single database with two object stores:
+ * Uses a single database with three object stores:
  * - 'fetched': stores ProcessedBookmark objects (key: id)
  * - 'checkpoint': stores checkpoint state (key: 'current')
+ * - 'edited-categories': stores edited categories for review (key: id)
  */
 
-import { ProcessedBookmark } from '../types';
+import { EditedCategory, ProcessedBookmark } from '../types';
 
 const DB_NAME = 'bookmark-tidy';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const FETCHED_STORE = 'fetched';
 const CHECKPOINT_STORE = 'checkpoint';
+const EDITED_CATEGORIES_STORE = 'edited-categories';
 
 /**
  * Checkpoint state for resumable organization
@@ -56,6 +58,11 @@ async function openDB(): Promise<IDBDatabase> {
       // Store for checkpoint state
       if (!db.objectStoreNames.contains(CHECKPOINT_STORE)) {
         db.createObjectStore(CHECKPOINT_STORE, { keyPath: 'id' });
+      }
+
+      // Store for edited categories
+      if (!db.objectStoreNames.contains(EDITED_CATEGORIES_STORE)) {
+        db.createObjectStore(EDITED_CATEGORIES_STORE, { keyPath: 'id' });
       }
     };
   });
@@ -172,9 +179,58 @@ export async function clearCheckpoint(): Promise<void> {
   });
 }
 
+// ===== EDITED CATEGORIES OPERATIONS =====
+
+/**
+ * Save edited categories to IndexedDB
+ */
+export async function saveEditedCategories(categories: EditedCategory[]): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(EDITED_CATEGORIES_STORE, 'readwrite');
+  const store = tx.objectStore(EDITED_CATEGORIES_STORE);
+
+  for (const category of categories) {
+    store.put(category);
+  }
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/**
+ * Load all edited categories from IndexedDB
+ */
+export async function getEditedCategories(): Promise<EditedCategory[]> {
+  const db = await openDB();
+  const tx = db.transaction(EDITED_CATEGORIES_STORE, 'readonly');
+  const store = tx.objectStore(EDITED_CATEGORIES_STORE);
+
+  return new Promise((resolve, reject) => {
+    const request = store.getAll();
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+/**
+ * Clear all edited categories from IndexedDB
+ */
+export async function clearEditedCategories(): Promise<void> {
+  const db = await openDB();
+  const tx = db.transaction(EDITED_CATEGORIES_STORE, 'readwrite');
+  tx.objectStore(EDITED_CATEGORIES_STORE).clear();
+
+  return new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
 /**
  * Clear all data (for cleanup after completion)
  */
 export async function clearAll(): Promise<void> {
-  await Promise.all([clearFetched(), clearCheckpoint()]);
+  await Promise.all([clearFetched(), clearCheckpoint(), clearEditedCategories()]);
 }
