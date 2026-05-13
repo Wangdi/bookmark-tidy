@@ -458,7 +458,8 @@ export function cancelOperation(): void {
 
 /**
  * Reset all storage and organized folder
- * Clears IndexedDB data and deletes the 📁Organized folder
+ * Clears IndexedDB data and deletes only the main 📁Organized folder
+ * (preserves trial folders for user review)
  */
 export async function resetStorage(): Promise<void> {
   // Cancel any running operation first
@@ -471,8 +472,9 @@ export async function resetStorage(): Promise<void> {
   // Clear IndexedDB storage
   await clearAll();
 
-  // Delete the organized folder
-  await clearOrganizedFolder();
+  // Delete only the main organized folder (not trial folders)
+  // Trial folders are preserved for user review
+  await clearOrganizedFolder('📁Organized');
 }
 
 /**
