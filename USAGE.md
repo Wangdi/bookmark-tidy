@@ -143,6 +143,20 @@ Automatically open Chrome's Bookmarks Manager when organization completes:
 - Toggle auto-navigate on/off in the popup
 - Setting is saved automatically
 
+## Detailed Progress Metrics
+
+See detailed metrics during organization:
+
+1. **Click "Show Details"** during processing to expand the metrics panel
+2. **View real-time stats** for each phase:
+   - **Fetch**: URLs processed, success/fail counts, timing
+   - **Storage**: IndexedDB reads/writes, checkpoint saves
+   - **Categorization**: Vocabulary size, clusters, iterations
+   - **Organization**: Folders/bookmarks created, batch timing
+   - **Performance**: Elapsed time, memory estimate
+
+**Toggle any time** during processing to show or hide details.
+
 ## Troubleshooting
 
 | Issue | Solution |

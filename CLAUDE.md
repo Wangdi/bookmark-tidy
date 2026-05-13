@@ -67,6 +67,7 @@ Two-phase pipeline for handling 2000+ bookmarks:
 | **Trial mode** | Process random subset (10-500) of bookmarks for testing, results saved to timestamped folder |
 | **Background notifications** | Chrome notifications when job completes (popup not focused) |
 | **Auto-navigate** | Automatically open Chrome Bookmarks Manager to organized folder on completion |
+| **Detailed progress** | Expandable metrics panel showing fetch/storage/categorization/organization stats |
 
 ## Key Design Decisions
 
