@@ -568,27 +568,92 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
 }
 
 /**
- * Handle rename category button click
- * Placeholder for Task 11
+ * Handle rename category
  */
-function handleRenameCategory(_categoryId: string): void {
-  // To be implemented in Task 11
+export function handleRenameCategory(categoryId: string): void {
+  const category = currentCategories.find(c => c.id === categoryId);
+  if (!category) return;
+
+  const newName = prompt('Enter new category name:', category.name);
+  if (!newName || newName.trim() === '') return;
+
+  currentCategories = currentCategories.map(c =>
+    c.id === categoryId ? { ...c, name: newName.trim() } : c
+  );
+
+  renderCategoryTree(currentCategories);
 }
 
 /**
- * Handle merge category button click
- * Placeholder for Task 11
+ * Handle merge category
  */
-function handleMergeCategory(_categoryId: string): void {
-  // To be implemented in Task 11
+export function handleMergeCategory(sourceId: string): void {
+  const source = currentCategories.find(c => c.id === sourceId);
+  if (!source) return;
+
+  // Get target category (exclude source)
+  const targets = currentCategories.filter(c => c.id !== sourceId);
+  if (targets.length === 0) {
+    alert('No other categories to merge with');
+    return;
+  }
+
+  const targetNames = targets.map(t => t.name).join(', ');
+  const targetName = prompt(`Merge "${source.name}" into which category?\n\nAvailable: ${targetNames}`);
+  if (!targetName) return;
+
+  const target = targets.find(t => t.name.toLowerCase() === targetName.toLowerCase());
+  if (!target) {
+    alert('Category not found');
+    return;
+  }
+
+  // Merge
+  currentCategories = currentCategories
+    .filter(c => c.id !== sourceId)
+    .map(c =>
+      c.id === target.id
+        ? { ...c, bookmarkIds: [...c.bookmarkIds, ...source.bookmarkIds] }
+        : c
+    );
+
+  renderCategoryTree(currentCategories);
 }
 
 /**
- * Handle delete category button click
- * Placeholder for Task 11
+ * Handle delete category
  */
-function handleDeleteCategory(_categoryId: string): void {
-  // To be implemented in Task 11
+export function handleDeleteCategory(categoryId: string): void {
+  const category = currentCategories.find(c => c.id === categoryId);
+  if (!category) return;
+
+  if (!confirm(`Delete "${category.name}"? Bookmarks will be moved to Uncategorized.`)) {
+    return;
+  }
+
+  // Delete and move to Uncategorized
+  const bookmarkIds = category.bookmarkIds;
+  let result = currentCategories.filter(c => c.id !== categoryId);
+
+  if (bookmarkIds.length > 0) {
+    const uncategorized = result.find(c => c.name === 'Uncategorized');
+    if (uncategorized) {
+      result = result.map(c =>
+        c.name === 'Uncategorized'
+          ? { ...c, bookmarkIds: [...c.bookmarkIds, ...bookmarkIds] }
+          : c
+      );
+    } else {
+      result.push({
+        id: 'uncategorized',
+        name: 'Uncategorized',
+        bookmarkIds,
+      });
+    }
+  }
+
+  currentCategories = result;
+  renderCategoryTree(currentCategories);
 }
 
 /**

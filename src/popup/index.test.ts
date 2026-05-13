@@ -2197,10 +2197,43 @@ describe('showStatusMessage', () => {
   });
 
   describe('category edit handlers', () => {
+    // Mock template element
+    const mockTemplate = {
+      content: {
+        cloneNode: vi.fn().mockReturnValue({
+          querySelector: vi.fn((selector: string) => {
+            if (selector === '.category-item') {
+              return {
+                dataset: {},
+                querySelector: vi.fn((sel: string) => {
+                  if (sel === '.category-name' || sel === '.category-count') {
+                    return { textContent: '' };
+                  }
+                  if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                    return { addEventListener: vi.fn() };
+                  }
+                  return null;
+                }),
+              };
+            }
+            return null;
+          }),
+        }),
+      },
+    };
+
     beforeEach(() => {
       vi.stubGlobal('prompt', vi.fn());
       vi.stubGlobal('confirm', vi.fn());
       vi.stubGlobal('alert', vi.fn());
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
     });
 
     afterEach(() => {
