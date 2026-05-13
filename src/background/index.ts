@@ -31,6 +31,11 @@ export const state: OrganizerState = {
 };
 
 /**
+ * AbortController for cancelling in-flight fetch operations
+ */
+let fetchAbortController: AbortController | null = null;
+
+/**
  * Reset state (for testing)
  */
 export function resetState(): void {
@@ -127,10 +132,11 @@ export async function sendProgress(event: ProgressEvent): Promise<void> {
  * Run the organization pipeline with two-phase processing
  * Phase 1: Fetch bookmarks in batches and store to IndexedDB
  * Phase 2: Load from IndexedDB, categorize, and organize
+ * @returns true if operation started, false if already running
  */
-export async function runOrganization(): Promise<void> {
+export async function runOrganization(): Promise<boolean> {
   if (state.isRunning) {
-    return;
+    return false;
   }
 
   state.isRunning = true;
@@ -147,7 +153,7 @@ export async function runOrganization(): Promise<void> {
         total: 0,
         error: "No bookmarks found",
       });
-      return;
+      return true;
     }
 
     const total = rawBookmarks.length;
@@ -189,15 +195,33 @@ export async function runOrganization(): Promise<void> {
             total: 0,
             error: "Operation cancelled",
           });
-          return;
+          return true;
         }
 
         const batch = pending.slice(i, i + FETCH_BATCH_SIZE);
 
-        // Fetch batch concurrently
+        // Create new AbortController for this batch so cancel can abort in-flight fetches
+        fetchAbortController = new AbortController();
+        const abortSignal = fetchAbortController.signal;
+
+        // Fetch batch concurrently with abort signal
         const results = await Promise.all(
-          batch.map(b => fetchBookmark(b))
+          batch.map(b => fetchBookmark(b, abortSignal))
         );
+
+        // Clear abort controller after batch completes
+        fetchAbortController = null;
+
+        // Check if cancelled during fetch - discard results if so
+        if (state.shouldAbort) {
+          await sendProgress({
+            type: "error",
+            current: 0,
+            total: 0,
+            error: "Operation cancelled",
+          });
+          return true;
+        }
 
         // Store to IndexedDB
         await storeFetched(results);
@@ -213,16 +237,17 @@ export async function runOrganization(): Promise<void> {
           lastUpdated: Date.now(),
         });
 
-        // Update progress
+        // Update progress - show actual URL being processed
+        const lastUrl = batch[batch.length - 1]?.url;
         state.current = fetchedIds.length;
         state.total = total;
-        state.currentUrl = `Fetched ${fetchedIds.length}/${total}`;
+        state.currentUrl = lastUrl ?? `Fetched ${fetchedIds.length}/${total}`;
 
         await sendProgress({
           type: "progress",
           current: fetchedIds.length,
           total,
-          currentUrl: `Fetched ${fetchedIds.length}/${total}`,
+          currentUrl: lastUrl ?? `Fetched ${fetchedIds.length}/${total}`,
         });
       }
     }
@@ -253,7 +278,7 @@ export async function runOrganization(): Promise<void> {
         total: 0,
         error: "Operation cancelled",
       });
-      return;
+      return true;
     }
 
     // Deduplicate
@@ -320,13 +345,25 @@ export async function runOrganization(): Promise<void> {
     state.isRunning = false;
     state.shouldAbort = false;
   }
+
+  return true;
 }
 
 /**
  * Cancel running operation
+ * Clears progress state immediately so popup shows correct state on reopen
+ * Also aborts any in-flight fetch operations
  */
 export function cancelOperation(): void {
   state.shouldAbort = true;
+  // Abort any in-flight fetch operations immediately
+  if (fetchAbortController) {
+    fetchAbortController.abort();
+  }
+  // Clear progress state immediately so popup shows correct state on reopen
+  state.current = 0;
+  state.total = 0;
+  state.currentUrl = undefined;
 }
 
 /**
@@ -345,8 +382,10 @@ export function handleMessage(
   sendResponse: (response?: unknown) => void
 ): boolean {
   if (message.type === "START_ORGANIZE") {
-    runOrganization();
-    sendResponse({ success: true });
+    runOrganization().then(started => {
+      sendResponse({ success: true, started });
+    });
+    return true; // Keep message channel open for async response
   } else if (message.type === "CANCEL") {
     cancelOperation();
     sendResponse({ success: true });

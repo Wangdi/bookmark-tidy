@@ -325,6 +325,86 @@ it('handles cancellation between batches', async () => {
 });
 ```
 
+### `cancelOperation` 详细测试
+
+```typescript
+// 取消时立即清除进度状态
+it('clears progress state immediately', () => {
+  state.current = 5;
+  state.total = 10;
+  state.currentUrl = 'https://example.com';
+
+  cancelOperation();
+
+  // 进度状态应该立即被清除
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+  expect(state.currentUrl).toBeUndefined();
+  expect(state.shouldAbort).toBe(true);
+});
+
+// 即使已经取消，再次取消也会清除进度状态
+it('clears progress state even when already aborted', () => {
+  state.shouldAbort = true;
+  state.current = 8;
+  state.total = 15;
+
+  cancelOperation();
+
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+});
+```
+
+### 取消 DB 一致性测试
+
+```typescript
+// 取消时丢弃部分批次结果
+it('discards partial batch results when cancelled during fetch', async () => {
+  // 创建 25 个书签（3 批次）
+  mockGetTree.mockResolvedValueOnce([...]);
+
+  // 在第一批获取期间设置取消
+  vi.mocked(fetchBookmark).mockImplementation(async (b) => {
+    fetchCount++;
+    if (fetchCount === 5) {
+      state.shouldAbort = true;  // 取消
+    }
+    return { ...b, status: 'ok' };
+  });
+
+  await runOrganization();
+
+  // 应该发送取消错误，状态应该被清除
+  expect(mockSendMessage).toHaveBeenCalledWith(
+    expect.objectContaining({ type: 'error', error: 'Operation cancelled' })
+  );
+  expect(state.current).toBe(0);
+  expect(state.total).toBe(0);
+});
+```
+
+### 弹窗重开状态一致性测试
+
+```typescript
+// 取消后弹窗重开显示正确状态
+it('returns cleared state after cancellation', async () => {
+  state.current = 5;
+  state.total = 10;
+  state.currentUrl = 'https://example.com';
+  state.isRunning = true;
+
+  cancelOperation();
+
+  // 弹窗重开时获取的状态应该显示已清除的进度
+  const currentState = { ...state };
+  expect(currentState.current).toBe(0);
+  expect(currentState.total).toBe(0);
+  expect(currentState.currentUrl).toBeUndefined();
+  expect(currentState.shouldAbort).toBe(true);
+});
+```
+
 ---
 
 ## 6. `src/popup/index.test.ts` - 弹出窗口 UI 测试
@@ -374,10 +454,10 @@ function createMockElements(): PopupElements {
 | `updateProgress` | 进度条更新（百分比计算、URL 显示） |
 | `showResults` | 结果显示（各种统计数据） |
 | `countBookmarksInTree` | 递归计数（扁平、嵌套、深层结构） |
-| `handleProgressMessage` | 消息处理（progress、complete、error、unknown） |
+| `handleProgressMessage` | 消息处理（progress、complete、error、unknown、"Operation cancelled" 特殊处理） |
 | `handleDone` | 关闭窗口 |
 | `getElements` | 懒加载 DOM 元素 |
-| `startOrganization` | 开始组织（发送 START_ORGANIZE 消息） |
+| `startOrganization` | 开始组织（发送 START_ORGANIZE 消息，处理 started: false 响应） |
 | `cancelOrganization` | 取消组织（发送 CANCEL 消息，恢复 idle 状态） |
 | `handleRetry` | 重试（调用 startOrganization） |
 | `setupMessageListener` | 消息监听器注册 |
@@ -408,6 +488,40 @@ it('sets up popup when DOM is already ready', async () => {
   await import('../popup/index');
   // 验证 setupMessageListener 被调用
   expect(mockAddListener).toHaveBeenCalled();
+});
+
+// 测试 "Operation cancelled" 不显示错误状态
+it('does NOT show error state for "Operation cancelled" error', () => {
+  const message: ProgressEvent = {
+    type: 'error',
+    current: 0,
+    total: 0,
+    error: 'Operation cancelled',
+  };
+
+  const result = handleProgressMessage(message);
+
+  // 应该返回 true（消息已处理）但不显示错误状态
+  expect(result).toBe(true);
+  expect(mockElements.errorState.classList.remove).not.toHaveBeenCalledWith('hidden');
+  // 应该显示 idle 状态
+  expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+});
+
+// 测试 startOrganization 处理 started: false
+it('shows idle state when started: false is returned', async () => {
+  const mockSendMessage = vi.fn().mockResolvedValue({ success: true, started: false });
+
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: mockSendMessage },
+    bookmarks: { getTree: vi.fn().mockResolvedValue([...]) },
+  });
+
+  await startOrganization();
+
+  // 应该先显示 processing，然后恢复到 idle
+  expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+  expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
 });
 ```
 

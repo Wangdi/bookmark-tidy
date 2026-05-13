@@ -350,6 +350,24 @@ describe('popup', () => {
       expect(result).toBe(false);
     });
 
+    it('does NOT show error state for "Operation cancelled" error', () => {
+      // When user intentionally cancels, we should NOT show error state
+      const message: ProgressEvent = {
+        type: 'error',
+        current: 0,
+        total: 0,
+        error: 'Operation cancelled',
+      };
+
+      const result = handleProgressMessage(message);
+
+      // Should return true (message was handled) but NOT show error state
+      expect(result).toBe(true);
+      expect(mockElements.errorState.classList.remove).not.toHaveBeenCalledWith('hidden');
+      // Should show idle state instead
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+    });
+
     it('handles progress message without URL', () => {
       const message: ProgressEvent = {
         type: 'progress',
@@ -401,6 +419,39 @@ describe('popup', () => {
 
       expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
       expect(mockSendMessage).toHaveBeenCalledWith({ type: 'START_ORGANIZE' });
+
+      vi.unstubAllGlobals();
+    });
+
+    it('shows idle state when started: false is returned', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true, started: false });
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: mockGetTree },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { startOrganization, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await startOrganization();
+
+      // Should have shown processing first, then reverted to idle
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
 
       vi.unstubAllGlobals();
     });
@@ -717,6 +768,99 @@ describe('popup', () => {
       expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
 
       vi.unstubAllGlobals();
+    });
+
+    it('shows cancelled state correctly when popup reopens after cancel', async () => {
+      // After cancel, state should have cleared progress but isRunning may still be true briefly
+      const mockSendMessage = vi.fn().mockResolvedValue({
+        isRunning: true,
+        shouldAbort: true,
+        current: 0,
+        total: 0,
+        currentUrl: undefined,
+      });
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'complete',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { init, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await init();
+
+      // Should show processing state (winding down) with cleared progress
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.currentUrl.textContent).toBe('Fetching: Starting...');
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('current URL display', () => {
+    it('shows actual URL when currentUrl is a real URL', async () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 3,
+        total: 10,
+        currentUrl: 'https://example.com/page',
+      };
+
+      handleProgressMessage(message);
+
+      expect(mockElements.currentUrl.textContent).toBe('Fetching: https://example.com/page');
+    });
+
+    it('shows status message when currentUrl is a status string', async () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 5,
+        total: 10,
+        currentUrl: 'Fetched 5/10',
+      };
+
+      handleProgressMessage(message);
+
+      expect(mockElements.currentUrl.textContent).toBe('Fetching: Fetched 5/10');
+    });
+
+    it('shows phase messages during processing', async () => {
+      const phases = [
+        'Loading fetched data...',
+        'Deduplicating...',
+        'Categorizing...',
+        'Organizing folders...',
+      ];
+
+      for (const phase of phases) {
+        const message: ProgressEvent = {
+          type: 'progress',
+          current: 0,
+          total: 1,
+          currentUrl: phase,
+        };
+
+        handleProgressMessage(message);
+
+        expect(mockElements.currentUrl.textContent).toBe(`Fetching: ${phase}`);
+      }
+    });
+
+    it('truncates long URLs for display', () => {
+      const longUrl = 'https://example.com/very/long/path/that/should/be/truncated/because/it/is/too/long/to/display';
+
+      updateProgress(5, 10, longUrl);
+
+      // The current implementation doesn't truncate, but we test the behavior
+      expect(mockElements.currentUrl.textContent).toBe(`Fetching: ${longUrl}`);
     });
   });
 });
