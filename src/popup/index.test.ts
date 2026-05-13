@@ -12,6 +12,7 @@ import {
   PopupElements,
   toggleDetails,
   updateDetailedMetrics,
+  renderCategoryTree,
 } from '../popup/index';
 import { ProgressEvent } from '../types';
 
@@ -41,6 +42,9 @@ function createMockElement(): HTMLElement {
     innerHTML: '',
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
+    appendChild: vi.fn(),
+    querySelector: vi.fn(),
+    querySelectorAll: vi.fn().mockReturnValue([]),
   } as unknown as HTMLElement;
 }
 
@@ -1875,6 +1879,318 @@ describe('showStatusMessage', () => {
 
       expect(result).toBe(true);
       expect(mockElements.performanceMetrics.textContent).toContain('Elapsed: 10.0s');
+
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('renderCategoryTree', () => {
+    it('renders categories with bookmark counts', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      const categories: import('../types').EditedCategory[] = [
+        { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2', 'bm-3'] },
+        { id: 'cat-2', name: 'News', bookmarkIds: ['bm-4'] },
+      ];
+
+      // Mock template element
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn().mockReturnValue({
+            querySelector: vi.fn((selector: string) => {
+              if (selector === '.category-item') {
+                return {
+                  dataset: {},
+                  querySelector: vi.fn((sel: string) => {
+                    if (sel === '.category-name' || sel === '.category-count') {
+                      return { textContent: '' };
+                    }
+                    if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                      return { addEventListener: vi.fn() };
+                    }
+                    return null;
+                  }),
+                };
+              }
+              return null;
+            }),
+          }),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      renderCategoryTree(categories);
+
+      // Should have cleared the tree first
+      expect(mockElements.categoryTree.innerHTML).toBe('');
+
+      // Template should have been used
+      expect(mockTemplate.content.cloneNode).toHaveBeenCalled();
+
+      vi.unstubAllGlobals();
+    });
+
+    it('clears existing categories before rendering', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Add existing content
+      mockElements.categoryTree.innerHTML = '<div class="category-item">Old</div>';
+
+      // Mock template element
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn().mockReturnValue({
+            querySelector: vi.fn((selector: string) => {
+              if (selector === '.category-item') {
+                return {
+                  dataset: {},
+                  querySelector: vi.fn((sel: string) => {
+                    if (sel === '.category-name' || sel === '.category-count') {
+                      return { textContent: '' };
+                    }
+                    if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                      return { addEventListener: vi.fn() };
+                    }
+                    return null;
+                  }),
+                };
+              }
+              return null;
+            }),
+          }),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      renderCategoryTree([{ id: 'cat-1', name: 'New', bookmarkIds: [] }]);
+
+      // Should have cleared the existing content
+      expect(mockElements.categoryTree.innerHTML).toBe('');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('renders category with correct data attributes', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      let capturedCategoryItem: any = null;
+
+      // Mock template element
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn().mockReturnValue({
+            querySelector: vi.fn((selector: string) => {
+              if (selector === '.category-item') {
+                capturedCategoryItem = {
+                  dataset: {},
+                  querySelector: vi.fn((sel: string) => {
+                    if (sel === '.category-name') {
+                      return { textContent: '' };
+                    }
+                    if (sel === '.category-count') {
+                      return { textContent: '' };
+                    }
+                    if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                      return { addEventListener: vi.fn() };
+                    }
+                    return null;
+                  }),
+                };
+                return capturedCategoryItem;
+              }
+              return null;
+            }),
+          }),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      renderCategoryTree([
+        { id: 'cat-123', name: 'Development', bookmarkIds: ['a', 'b'] },
+      ]);
+
+      // Check that category ID was set as data attribute
+      expect(capturedCategoryItem.dataset.categoryId).toBe('cat-123');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('sets category name and count correctly', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      let capturedName: { textContent: string } | null = null;
+      let capturedCount: { textContent: string } | null = null;
+
+      // Mock template element
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn().mockReturnValue({
+            querySelector: vi.fn((selector: string) => {
+              if (selector === '.category-item') {
+                return {
+                  dataset: {},
+                  querySelector: vi.fn((sel: string) => {
+                    if (sel === '.category-name') {
+                      capturedName = { textContent: '' };
+                      return capturedName;
+                    }
+                    if (sel === '.category-count') {
+                      capturedCount = { textContent: '' };
+                      return capturedCount;
+                    }
+                    if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                      return { addEventListener: vi.fn() };
+                    }
+                    return null;
+                  }),
+                };
+              }
+              return null;
+            }),
+          }),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      renderCategoryTree([
+        { id: 'cat-1', name: 'Technology', bookmarkIds: ['a', 'b', 'c', 'd', 'e'] },
+      ]);
+
+      expect(capturedName!.textContent).toBe('Technology');
+      expect(capturedCount!.textContent).toBe('5');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('adds event listeners to action buttons', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      const mockListeners = {
+        edit: vi.fn(),
+        merge: vi.fn(),
+        delete: vi.fn(),
+      };
+
+      // Mock template element
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn().mockReturnValue({
+            querySelector: vi.fn((selector: string) => {
+              if (selector === '.category-item') {
+                return {
+                  dataset: {},
+                  querySelector: vi.fn((sel: string) => {
+                    if (sel === '.category-name' || sel === '.category-count') {
+                      return { textContent: '' };
+                    }
+                    if (sel === '.btn-edit') {
+                      return { addEventListener: mockListeners.edit };
+                    }
+                    if (sel === '.btn-merge') {
+                      return { addEventListener: mockListeners.merge };
+                    }
+                    if (sel === '.btn-delete') {
+                      return { addEventListener: mockListeners.delete };
+                    }
+                    return null;
+                  }),
+                };
+              }
+              return null;
+            }),
+          }),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      renderCategoryTree([
+        { id: 'cat-1', name: 'Test', bookmarkIds: [] },
+      ]);
+
+      // All buttons should have click listeners added
+      expect(mockListeners.edit).toHaveBeenCalledWith('click', expect.any(Function));
+      expect(mockListeners.merge).toHaveBeenCalledWith('click', expect.any(Function));
+      expect(mockListeners.delete).toHaveBeenCalledWith('click', expect.any(Function));
+
+      vi.unstubAllGlobals();
+    });
+
+    it('handles empty categories array', async () => {
+      vi.resetModules();
+      const { renderCategoryTree, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Mock template element (should not be used)
+      const mockTemplate = {
+        content: {
+          cloneNode: vi.fn(),
+        },
+      };
+
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+
+      // Should not throw
+      expect(() => renderCategoryTree([])).not.toThrow();
+
+      // Template should not have been used
+      expect(mockTemplate.content.cloneNode).not.toHaveBeenCalled();
 
       vi.unstubAllGlobals();
     });

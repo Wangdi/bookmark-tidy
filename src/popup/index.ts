@@ -1,6 +1,6 @@
 // src/popup/index.ts
 
-import { ProgressEvent } from '../types';
+import { ProgressEvent, EditedCategory } from '../types';
 
 /**
  * DOM element cache - populated on first access
@@ -542,6 +542,69 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
     return true;
   }
   return false;
+}
+
+/**
+ * Handle rename category button click
+ * Placeholder for Task 11
+ */
+function handleRenameCategory(_categoryId: string): void {
+  // To be implemented in Task 11
+}
+
+/**
+ * Handle merge category button click
+ * Placeholder for Task 11
+ */
+function handleMergeCategory(_categoryId: string): void {
+  // To be implemented in Task 11
+}
+
+/**
+ * Handle delete category button click
+ * Placeholder for Task 11
+ */
+function handleDeleteCategory(_categoryId: string): void {
+  // To be implemented in Task 11
+}
+
+/**
+ * Render category tree in editor
+ */
+export function renderCategoryTree(categories: EditedCategory[]): void {
+  const els = getElements();
+
+  // Clear existing
+  els.categoryTree.innerHTML = '';
+
+  // Return early if no categories
+  if (categories.length === 0) {
+    return;
+  }
+
+  // Get template
+  const template = document.getElementById('category-template') as HTMLTemplateElement;
+
+  categories.forEach(category => {
+    const clone = template.content.cloneNode(true) as DocumentFragment;
+    const item = clone.querySelector('.category-item') as HTMLElement;
+
+    // Set category data
+    item.dataset.categoryId = category.id;
+    item.querySelector('.category-name')!.textContent = category.name;
+    item.querySelector('.category-count')!.textContent = String(category.bookmarkIds.length);
+
+    // Add event listeners
+    const editBtn = item.querySelector('.btn-edit') as HTMLButtonElement;
+    const mergeBtn = item.querySelector('.btn-merge') as HTMLButtonElement;
+    const deleteBtn = item.querySelector('.btn-delete') as HTMLButtonElement;
+
+    editBtn.addEventListener('click', () => handleRenameCategory(category.id));
+    mergeBtn.addEventListener('click', () => handleMergeCategory(category.id));
+    deleteBtn.addEventListener('click', () => handleDeleteCategory(category.id));
+
+    els.categoryTree.appendChild(clone);
+  });
 }
 
 /**
