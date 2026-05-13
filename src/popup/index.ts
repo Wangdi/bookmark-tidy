@@ -12,10 +12,11 @@ export interface PopupElements {
   processingState: HTMLElement;
   completeState: HTMLElement;
   errorState: HTMLElement;
-  startBtn: HTMLElement;
-  cancelBtn: HTMLElement;
-  doneBtn: HTMLElement;
-  retryBtn: HTMLElement;
+  startBtn: HTMLButtonElement;
+  cancelBtn: HTMLButtonElement;
+  doneBtn: HTMLButtonElement;
+  retryBtn: HTMLButtonElement;
+  resetBtn: HTMLButtonElement;
   bookmarkCount: HTMLElement;
   progressBar: HTMLElement;
   progressText: HTMLElement;
@@ -35,10 +36,11 @@ export function getElements(): PopupElements {
       processingState: document.getElementById('processing-state')!,
       completeState: document.getElementById('complete-state')!,
       errorState: document.getElementById('error-state')!,
-      startBtn: document.getElementById('start-btn')!,
-      cancelBtn: document.getElementById('cancel-btn')!,
-      doneBtn: document.getElementById('done-btn')!,
-      retryBtn: document.getElementById('retry-btn')!,
+      startBtn: document.getElementById('start-btn')! as HTMLButtonElement,
+      cancelBtn: document.getElementById('cancel-btn')! as HTMLButtonElement,
+      doneBtn: document.getElementById('done-btn')! as HTMLButtonElement,
+      retryBtn: document.getElementById('retry-btn')! as HTMLButtonElement,
+      resetBtn: document.getElementById('reset-btn')! as HTMLButtonElement,
       bookmarkCount: document.getElementById('bookmark-count')!,
       progressBar: document.getElementById('progress-bar')!,
       progressText: document.getElementById('progress-text')!,
@@ -212,6 +214,45 @@ export async function handleRetry() {
 }
 
 /**
+ * Handle reset button - clear all stored data and organized folder
+ */
+export async function handleReset() {
+  const els = getElements();
+  // Disable button during operation
+  els.resetBtn.textContent = 'Clearing...';
+  els.resetBtn.disabled = true;
+
+  try {
+    const response = await chrome.runtime.sendMessage({ type: 'RESET' });
+
+    if (response && response.success) {
+      els.resetBtn.textContent = 'Clear All Data';
+      els.resetBtn.disabled = false;
+      // Update bookmark count after reset
+      const count = await getBookmarkCount();
+      els.bookmarkCount.textContent = `${count} bookmarks found`;
+    } else {
+      els.resetBtn.textContent = 'Clear All Data';
+      els.resetBtn.disabled = false;
+      // Show error briefly
+      const originalText = els.bookmarkCount.textContent;
+      els.bookmarkCount.textContent = `Reset failed: ${response?.error || 'Unknown error'}`;
+      setTimeout(() => {
+        els.bookmarkCount.textContent = originalText;
+      }, 2000);
+    }
+  } catch (error) {
+    els.resetBtn.textContent = 'Clear All Data';
+    els.resetBtn.disabled = false;
+    const originalText = els.bookmarkCount.textContent;
+    els.bookmarkCount.textContent = `Reset failed: ${(error as Error).message}`;
+    setTimeout(() => {
+      els.bookmarkCount.textContent = originalText;
+    }, 2000);
+  }
+}
+
+/**
  * Handle progress message from background
  */
 export function handleProgressMessage(message: ProgressEvent): boolean {
@@ -244,6 +285,7 @@ export function setupEventListeners() {
   els.cancelBtn.addEventListener('click', cancelOrganization);
   els.doneBtn.addEventListener('click', handleDone);
   els.retryBtn.addEventListener('click', handleRetry);
+  els.resetBtn.addEventListener('click', handleReset);
 }
 
 /**

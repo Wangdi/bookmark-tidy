@@ -40,6 +40,14 @@ function createMockElement(): HTMLElement {
   } as unknown as HTMLElement;
 }
 
+// Helper to create mock button element
+function createMockButton(): HTMLButtonElement {
+  return {
+    ...createMockElement(),
+    disabled: false,
+  } as unknown as HTMLButtonElement;
+}
+
 // Helper to create mock elements
 function createMockElements(): PopupElements {
   return {
@@ -47,10 +55,11 @@ function createMockElements(): PopupElements {
     processingState: createMockElement(),
     completeState: createMockElement(),
     errorState: createMockElement(),
-    startBtn: createMockElement(),
-    cancelBtn: createMockElement(),
-    doneBtn: createMockElement(),
-    retryBtn: createMockElement(),
+    startBtn: createMockButton(),
+    cancelBtn: createMockButton(),
+    doneBtn: createMockButton(),
+    retryBtn: createMockButton(),
+    resetBtn: createMockButton(),
     bookmarkCount: createMockElement(),
     progressBar: createMockElement(),
     progressText: createMockElement(),
@@ -861,6 +870,136 @@ describe('popup', () => {
 
       // The current implementation doesn't truncate, but we test the behavior
       expect(mockElements.currentUrl.textContent).toBe(`Fetching: ${longUrl}`);
+    });
+  });
+
+  describe('handleReset', () => {
+    it('sends RESET message and updates bookmark count on success', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: mockGetTree },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleReset, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await handleReset();
+
+      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'RESET' });
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+      expect(mockElements.resetBtn.textContent).toBe('Clear All Data');
+      expect(mockElements.resetBtn.disabled).toBe(false);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('shows error message when reset fails', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: false, error: 'Something went wrong' });
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleReset, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      // Set initial text
+      mockElements.bookmarkCount.textContent = '5 bookmarks found';
+
+      await handleReset();
+
+      expect(mockElements.bookmarkCount.textContent).toContain('Reset failed');
+
+      vi.unstubAllGlobals();
+    });
+
+    it('handles exception during reset', async () => {
+      const mockSendMessage = vi.fn().mockRejectedValue(new Error('Network error'));
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleReset, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      mockElements.bookmarkCount.textContent = '5 bookmarks found';
+
+      await handleReset();
+
+      expect(mockElements.bookmarkCount.textContent).toContain('Network error');
+      expect(mockElements.resetBtn.textContent).toBe('Clear All Data');
+      expect(mockElements.resetBtn.disabled).toBe(false);
+
+      vi.unstubAllGlobals();
+    });
+
+    it('disables button during reset operation', async () => {
+      let resolveReset: (value: unknown) => void;
+      const mockSendMessage = vi.fn().mockImplementation(() => new Promise(resolve => {
+        resolveReset = resolve;
+      }));
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]) },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleReset, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      const resetPromise = handleReset();
+
+      // Button should be disabled during operation
+      expect(mockElements.resetBtn.textContent).toBe('Clearing...');
+      expect(mockElements.resetBtn.disabled).toBe(true);
+
+      // Resolve the promise
+      resolveReset!({ success: true });
+      await resetPromise;
+
+      // Button should be re-enabled
+      expect(mockElements.resetBtn.textContent).toBe('Clear All Data');
+      expect(mockElements.resetBtn.disabled).toBe(false);
+
+      vi.unstubAllGlobals();
     });
   });
 });
