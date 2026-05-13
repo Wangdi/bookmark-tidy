@@ -11,6 +11,8 @@ import {
   clearAll,
   saveCheckpoint,
   loadCheckpoint,
+  saveEditedCategories,
+  clearEditedCategories,
 } from "../lib/storage";
 
 /**
@@ -779,7 +781,7 @@ export function getState(): OrganizerState {
  * Handle message from popup
  */
 export function handleMessage(
-  message: { type: string; maxBookmarks?: number },
+  message: { type: string; maxBookmarks?: number; categories?: EditedCategory[] },
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void
 ): boolean {
@@ -803,6 +805,17 @@ export function handleMessage(
       sendResponse({ success: false, error: (error as Error).message });
     });
     return true; // Keep message channel open for async response
+  } else if (message.type === "APPLY_CATEGORY_EDIT") {
+    saveEditedCategories(message.categories!).then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
+  } else if (message.type === "REGENERATE_CATEGORIES") {
+    state.shouldAbort = true;
+    clearEditedCategories().then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
   }
   return true; // Keep message channel open for async response
 }
