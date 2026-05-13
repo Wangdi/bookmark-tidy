@@ -27,6 +27,7 @@ export interface PopupElements {
   trialCount: HTMLInputElement;
   trialError: HTMLElement;
   notificationToggle: HTMLInputElement;
+  autoNavigateToggle: HTMLInputElement;
 }
 
 /**
@@ -54,6 +55,7 @@ export function getElements(): PopupElements {
       trialCount: document.getElementById('trial-count')! as HTMLInputElement,
       trialError: document.getElementById('trial-error')!,
       notificationToggle: document.getElementById('notification-toggle')! as HTMLInputElement,
+      autoNavigateToggle: document.getElementById('auto-navigate-toggle')! as HTMLInputElement,
     };
   }
   return elements;

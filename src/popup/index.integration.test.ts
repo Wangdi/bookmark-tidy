@@ -69,6 +69,7 @@ function createMockElements(): PopupElements {
     trialCount: createMockInput(),
     trialError: createMockElement(),
     notificationToggle: createMockInput(),
+    autoNavigateToggle: createMockInput(),
   };
 }
 
