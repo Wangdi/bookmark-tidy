@@ -26,6 +26,7 @@ export interface PopupElements {
   errorMessage: HTMLElement;
   trialCount: HTMLInputElement;
   trialError: HTMLElement;
+  notificationToggle: HTMLInputElement;
 }
 
 /**
@@ -52,6 +53,7 @@ export function getElements(): PopupElements {
       errorMessage: document.getElementById('error-message')!,
       trialCount: document.getElementById('trial-count')! as HTMLInputElement,
       trialError: document.getElementById('trial-error')!,
+      notificationToggle: document.getElementById('notification-toggle')! as HTMLInputElement,
     };
   }
   return elements;

@@ -219,3 +219,64 @@ h1 {
   font-size: 12px;
   color: var(--error-color, #d32f2f);
 }
+
+/* Notification toggle styles */
+.settings-group {
+  margin: 16px 0;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 44px;
+  height: 24px;
+  background-color: var(--border-color, #ddd);
+  border-radius: 24px;
+  transition: background-color 0.2s;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  border-radius: 50%;
+  transition: transform 0.2s;
+}
+
+.toggle-label input:checked + .toggle-slider {
+  background-color: var(--primary-color, #4285f4);
+}
+
+.toggle-label input:checked + .toggle-slider::before {
+  transform: translateX(20px);
+}
+
+.toggle-text {
+  font-size: 14px;
+  color: var(--text-primary, #333);
+}
+
+.settings-hint {
+  margin-top: 4px;
+  margin-left: 56px;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+}
