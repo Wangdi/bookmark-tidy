@@ -64,3 +64,21 @@ export interface ClusterResult {
 export interface OrganizationOptions {
   maxBookmarks?: number;  // undefined = all, number = trial mode
 }
+
+export interface NotificationOptions {
+  enabled?: boolean;  // default: true
+}
+
+export interface NotificationPayload {
+  type: 'success' | 'error' | 'cancelled';
+  title: string;
+  message: string;
+  stats?: {
+    processed: number;
+    categories: number;
+    deadlinks: number;
+    duplicatesMerged: number;
+    unreachable: number;
+  };
+  error?: string;
+}
