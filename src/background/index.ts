@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -35,6 +35,7 @@ export const state: OrganizerState = {
   current: 0,
   total: 0,
   currentUrl: undefined,
+  isTrialMode: false,
 };
 
 /**
@@ -88,6 +89,7 @@ export function resetState(): void {
   state.current = 0;
   state.total = 0;
   state.currentUrl = undefined;
+  state.isTrialMode = false;
 }
 
 /**
@@ -176,9 +178,10 @@ export async function sendProgress(event: ProgressEvent): Promise<void> {
  * Run the organization pipeline with two-phase processing
  * Phase 1: Fetch bookmarks in batches and store to IndexedDB
  * Phase 2: Load from IndexedDB, categorize, and organize
+ * @param options Optional configuration for trial mode
  * @returns true if operation started, false if already running
  */
-export async function runOrganization(): Promise<boolean> {
+export async function runOrganization(options?: OrganizationOptions): Promise<boolean> {
   if (state.isRunning) {
     return false;
   }
@@ -200,16 +203,49 @@ export async function runOrganization(): Promise<boolean> {
       return true;
     }
 
-    const total = rawBookmarks.length;
+    const totalCount = rawBookmarks.length;
+
+    // Determine if trial mode
+    const isTrialMode = options?.maxBookmarks !== undefined && options.maxBookmarks < totalCount;
+    state.isTrialMode = isTrialMode;
+
+    // Select bookmarks for processing
+    let bookmarksToProcess: RawBookmark[];
+    let trialInfo: TrialInfo | undefined;
+
+    if (isTrialMode) {
+      bookmarksToProcess = selectRandomBookmarks(rawBookmarks, options!.maxBookmarks!);
+      trialInfo = {
+        folderName: generateTrialFolderName(options!.maxBookmarks!),
+        processedCount: bookmarksToProcess.length,
+        totalCount,
+      };
+    } else {
+      bookmarksToProcess = rawBookmarks;
+    }
+
+    const total = bookmarksToProcess.length;
 
     // Load checkpoint to see if we can resume
     const checkpoint = await loadCheckpoint();
 
+    // Send initial trial mode info
+    if (isTrialMode && trialInfo) {
+      await sendProgress({
+        type: "progress",
+        current: 0,
+        total,
+        currentUrl: `Trial mode: Processing ${total} of ${totalCount} bookmarks`,
+        isTrialMode: true,
+        trialInfo,
+      });
+    }
+
     // ===== PHASE 1: FETCH TO STORAGE =====
     if (!checkpoint || checkpoint.phase === 'fetching') {
       const pending = checkpoint?.pendingIds
-        ? rawBookmarks.filter(b => checkpoint.pendingIds.includes(b.id))
-        : rawBookmarks;
+        ? bookmarksToProcess.filter(b => checkpoint.pendingIds.includes(b.id))
+        : bookmarksToProcess;
 
       const fetchedIds = checkpoint?.fetchedIds ?? [];
 
@@ -361,22 +397,31 @@ export async function runOrganization(): Promise<boolean> {
     });
     const deadlinks = fetchedBookmarks.filter(b => b.status === 'deadlink');
     const unreachable = fetchedBookmarks.filter(b => b.status === 'unreachable');
+
+    // Determine folder name based on mode
+    const folderName = isTrialMode && trialInfo
+      ? trialInfo.folderName
+      : '📁Organized';
+
     const organizeResult = await organizeBookmarks(
       categorizeResult.bookmarks,
       deadlinks,
       unreachable,
       dedupeResult.duplicatesMerged,
+      folderName,
     );
 
     // Clear storage and checkpoint
     await clearAll();
 
-    // Send completion
+    // Send completion with trial info
     await sendProgress({
       type: "complete",
       current: total,
       total,
       stats: organizeResult.stats,
+      isTrialMode,
+      trialInfo,
     });
   } catch (error) {
     await sendProgress({
@@ -388,6 +433,7 @@ export async function runOrganization(): Promise<boolean> {
   } finally {
     state.isRunning = false;
     state.shouldAbort = false;
+    state.isTrialMode = false;
   }
 
   return true;
@@ -440,12 +486,15 @@ export function getState(): OrganizerState {
  * Handle message from popup
  */
 export function handleMessage(
-  message: { type: string },
+  message: { type: string; maxBookmarks?: number },
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void
 ): boolean {
   if (message.type === "START_ORGANIZE") {
-    runOrganization().then(started => {
+    const options: OrganizationOptions = {
+      maxBookmarks: message.maxBookmarks,
+    };
+    runOrganization(options).then(started => {
       sendResponse({ success: true, started });
     });
     return true; // Keep message channel open for async response

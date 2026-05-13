@@ -53,6 +53,7 @@ export interface OrganizerState {
   current: number;
   total: number;
   currentUrl?: string;
+  isTrialMode?: boolean;  // Flag for trial mode
 }
 
 export interface ClusterResult {

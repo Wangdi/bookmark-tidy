@@ -317,7 +317,7 @@ describe('background unit tests', () => {
 
     it('getState returns copy of state', () => {
       const currentState = getState();
-      expect(currentState).toEqual({ isRunning: false, shouldAbort: false, current: 0, total: 0, currentUrl: undefined });
+      expect(currentState).toEqual({ isRunning: false, shouldAbort: false, current: 0, total: 0, currentUrl: undefined, isTrialMode: false });
 
       // Modifying returned object doesn't affect original
       currentState.isRunning = true;
@@ -352,7 +352,7 @@ describe('background unit tests', () => {
 
       handleMessage({ type: 'GET_STATE' }, {} as chrome.runtime.MessageSender, sendResponse);
 
-      expect(sendResponse).toHaveBeenCalledWith({ isRunning: false, shouldAbort: false, current: 0, total: 0, currentUrl: undefined });
+      expect(sendResponse).toHaveBeenCalledWith({ isRunning: false, shouldAbort: false, current: 0, total: 0, currentUrl: undefined, isTrialMode: false });
     });
 
     it('responds to CANCEL', () => {
