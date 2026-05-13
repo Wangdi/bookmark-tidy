@@ -725,3 +725,221 @@ describe('navigateToBookmarksManager', () => {
     expect(mockWindowsUpdate).toHaveBeenCalledWith(10, { focused: true });
   });
 });
+
+describe('DetailedMetrics types', () => {
+  it('FetchMetrics has all required properties', () => {
+    const metrics: import('../types').FetchMetrics = {
+      totalUrls: 100,
+      successful: 95,
+      failed: 3,
+      timedOut: 2,
+      averageTime: 250,
+      totalTime: 25000,
+    };
+    expect(metrics.totalUrls).toBe(100);
+    expect(metrics.successful).toBe(95);
+    expect(metrics.failed).toBe(3);
+    expect(metrics.timedOut).toBe(2);
+    expect(metrics.averageTime).toBe(250);
+    expect(metrics.totalTime).toBe(25000);
+  });
+
+  it('StorageMetrics has all required properties', () => {
+    const metrics: import('../types').StorageMetrics = {
+      indexedDbWrites: 100,
+      indexedDbReads: 10,
+      checkpointSaves: 5,
+      estimatedSize: 1024000,
+    };
+    expect(metrics.indexedDbWrites).toBe(100);
+    expect(metrics.indexedDbReads).toBe(10);
+    expect(metrics.checkpointSaves).toBe(5);
+    expect(metrics.estimatedSize).toBe(1024000);
+  });
+
+  it('CategorizationMetrics has all required properties', () => {
+    const metrics: import('../types').CategorizationMetrics = {
+      vocabularySize: 5000,
+      vectorDimensions: 5000,
+      clusters: 15,
+      iterations: 20,
+      convergenceTime: 1500,
+    };
+    expect(metrics.vocabularySize).toBe(5000);
+    expect(metrics.vectorDimensions).toBe(5000);
+    expect(metrics.clusters).toBe(15);
+    expect(metrics.iterations).toBe(20);
+    expect(metrics.convergenceTime).toBe(1500);
+  });
+
+  it('OrganizationMetrics has all required properties', () => {
+    const metrics: import('../types').OrganizationMetrics = {
+      foldersCreated: 20,
+      bookmarksCreated: 100,
+      batches: 10,
+      averageBatchTime: 500,
+    };
+    expect(metrics.foldersCreated).toBe(20);
+    expect(metrics.bookmarksCreated).toBe(100);
+    expect(metrics.batches).toBe(10);
+    expect(metrics.averageBatchTime).toBe(500);
+  });
+
+  it('PerformanceMetrics has all required properties', () => {
+    const metrics: import('../types').PerformanceMetrics = {
+      totalElapsed: 30000,
+      averagePerBookmark: 30,
+      memoryEstimate: 6291456,
+    };
+    expect(metrics.totalElapsed).toBe(30000);
+    expect(metrics.averagePerBookmark).toBe(30);
+    expect(metrics.memoryEstimate).toBe(6291456);
+  });
+
+  it('DetailedMetrics can have optional nested metrics', () => {
+    const metrics: import('../types').DetailedMetrics = {
+      fetch: {
+        totalUrls: 100,
+        successful: 95,
+        failed: 3,
+        timedOut: 2,
+        averageTime: 250,
+        totalTime: 25000,
+      },
+    };
+    expect(metrics.fetch?.successful).toBe(95);
+    expect(metrics.storage).toBeUndefined();
+  });
+
+  it('DetailedMetrics can combine all metrics', () => {
+    const metrics: import('../types').DetailedMetrics = {
+      fetch: {
+        totalUrls: 100,
+        successful: 95,
+        failed: 3,
+        timedOut: 2,
+        averageTime: 250,
+        totalTime: 25000,
+      },
+      storage: {
+        indexedDbWrites: 100,
+        indexedDbReads: 10,
+        checkpointSaves: 5,
+        estimatedSize: 1024000,
+      },
+      categorization: {
+        vocabularySize: 5000,
+        vectorDimensions: 5000,
+        clusters: 15,
+        iterations: 20,
+        convergenceTime: 1500,
+      },
+      organization: {
+        foldersCreated: 20,
+        bookmarksCreated: 100,
+        batches: 10,
+        averageBatchTime: 500,
+      },
+      performance: {
+        totalElapsed: 30000,
+        averagePerBookmark: 30,
+        memoryEstimate: 6291456,
+      },
+    };
+    expect(metrics.fetch?.successful).toBe(95);
+    expect(metrics.storage?.indexedDbWrites).toBe(100);
+    expect(metrics.categorization?.clusters).toBe(15);
+    expect(metrics.organization?.foldersCreated).toBe(20);
+    expect(metrics.performance?.totalElapsed).toBe(30000);
+  });
+});
+
+describe('ProgressEvent with detailedMetrics', () => {
+  it('accepts optional detailedMetrics in progress event', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'progress',
+      current: 50,
+      total: 100,
+      detailedMetrics: {
+        fetch: {
+          totalUrls: 50,
+          successful: 48,
+          failed: 1,
+          timedOut: 1,
+          averageTime: 200,
+          totalTime: 10000,
+        },
+      },
+    };
+    expect(event.detailedMetrics?.fetch?.successful).toBe(48);
+  });
+
+  it('works without detailedMetrics (backward compatible)', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'complete',
+      current: 100,
+      total: 100,
+      stats: {
+        processed: 100,
+        duplicatesMerged: 5,
+        deadlinks: 3,
+        unreachable: 2,
+        categories: 12,
+      },
+    };
+    expect(event.detailedMetrics).toBeUndefined();
+  });
+
+  it('includes detailedMetrics with all nested metrics on complete', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'complete',
+      current: 100,
+      total: 100,
+      stats: {
+        processed: 100,
+        duplicatesMerged: 5,
+        deadlinks: 3,
+        unreachable: 2,
+        categories: 12,
+      },
+      detailedMetrics: {
+        fetch: {
+          totalUrls: 100,
+          successful: 95,
+          failed: 3,
+          timedOut: 2,
+          averageTime: 250,
+          totalTime: 25000,
+        },
+        storage: {
+          indexedDbWrites: 100,
+          indexedDbReads: 1,
+          checkpointSaves: 10,
+          estimatedSize: 1024000,
+        },
+        categorization: {
+          vocabularySize: 5000,
+          vectorDimensions: 5000,
+          clusters: 12,
+          iterations: 20,
+          convergenceTime: 1500,
+        },
+        organization: {
+          foldersCreated: 15,
+          bookmarksCreated: 100,
+          batches: 10,
+          averageBatchTime: 500,
+        },
+        performance: {
+          totalElapsed: 30000,
+          averagePerBookmark: 300,
+          memoryEstimate: 6291456,
+        },
+      },
+    };
+    expect(event.type).toBe('complete');
+    expect(event.stats?.categories).toBe(12);
+    expect(event.detailedMetrics?.categorization?.clusters).toBe(12);
+    expect(event.detailedMetrics?.organization?.foldersCreated).toBe(15);
+  });
+});

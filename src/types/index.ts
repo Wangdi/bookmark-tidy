@@ -44,6 +44,7 @@ export interface ProgressEvent {
   error?: string;
   isTrialMode?: boolean;  // Flag for trial mode
   trialInfo?: TrialInfo;  // Trial-specific information
+  detailedMetrics?: DetailedMetrics;  // Detailed performance metrics
 }
 
 export interface OrganizerState {
@@ -91,4 +92,49 @@ export interface OrganizedFolderInfo {
   id: string;
   title: string;
   isTrial?: boolean;
+}
+
+export interface FetchMetrics {
+  totalUrls: number;
+  successful: number;
+  failed: number;
+  timedOut: number;
+  averageTime: number;  // ms per URL
+  totalTime: number;    // total fetch time in ms
+}
+
+export interface StorageMetrics {
+  indexedDbWrites: number;
+  indexedDbReads: number;
+  checkpointSaves: number;
+  estimatedSize: number;  // bytes
+}
+
+export interface CategorizationMetrics {
+  vocabularySize: number;
+  vectorDimensions: number;
+  clusters: number;
+  iterations: number;
+  convergenceTime: number;  // ms
+}
+
+export interface OrganizationMetrics {
+  foldersCreated: number;
+  bookmarksCreated: number;
+  batches: number;
+  averageBatchTime: number;  // ms per batch
+}
+
+export interface PerformanceMetrics {
+  totalElapsed: number;  // ms
+  averagePerBookmark: number;  // ms per bookmark
+  memoryEstimate: number;  // bytes
+}
+
+export interface DetailedMetrics {
+  fetch?: FetchMetrics;
+  storage?: StorageMetrics;
+  categorization?: CategorizationMetrics;
+  organization?: OrganizationMetrics;
+  performance?: PerformanceMetrics;
 }
