@@ -157,6 +157,25 @@ See detailed metrics during organization:
 
 **Toggle any time** during processing to show or hide details.
 
+## Category Preview and Editing
+
+After categorization completes, you can review and edit the generated categories:
+
+1. **Review Categories**: Browse the category tree showing all generated categories
+2. **Rename**: Click ✏️ to rename a category
+3. **Merge**: Click 🔀 to merge two categories
+4. **Delete**: Click 🗑️ to delete a category (bookmarks move to "Uncategorized")
+5. **Apply Changes**: Click "✅ Apply Changes" to proceed with organization
+6. **Regenerate**: Click "🔄 Regenerate" to re-run categorization
+
+### Editing Operations
+
+- **Rename**: Changes the category name for all bookmarks in that category
+- **Merge**: Combines two categories, moving all bookmarks from source to target
+- **Delete**: Removes the category and moves bookmarks to "Uncategorized"
+
+Note: Complex operations like drag-drop and undo/redo are not supported to keep the interface simple.
+
 ## Troubleshooting
 
 | Issue | Solution |

@@ -68,6 +68,7 @@ Two-phase pipeline for handling 2000+ bookmarks:
 | **Background notifications** | Chrome notifications when job completes (popup not focused) |
 | **Auto-navigate** | Automatically open Chrome Bookmarks Manager to organized folder on completion |
 | **Detailed progress** | Expandable metrics panel showing fetch/storage/categorization/organization stats |
+| **Category editor** | Preview and edit categories before organizing |
 
 ## Key Design Decisions
 
