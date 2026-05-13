@@ -138,3 +138,14 @@ export interface DetailedMetrics {
   organization?: OrganizationMetrics;
   performance?: PerformanceMetrics;
 }
+
+export interface EditedCategory {
+  id: string;
+  name: string;
+  bookmarkIds: string[];
+}
+
+export type CategoryEditAction =
+  | { type: 'rename'; categoryId: string; newName: string }
+  | { type: 'merge'; sourceCategoryId: string; targetCategoryId: string }
+  | { type: 'delete'; categoryId: string };

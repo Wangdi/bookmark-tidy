@@ -943,3 +943,41 @@ describe('ProgressEvent with detailedMetrics', () => {
     expect(event.detailedMetrics?.organization?.foldersCreated).toBe(15);
   });
 });
+
+describe('Category editor types', () => {
+  it('accepts EditedCategory with name and bookmarks', () => {
+    const category: import('../types').EditedCategory = {
+      id: 'cat-1',
+      name: 'Development',
+      bookmarkIds: ['bm-1', 'bm-2', 'bm-3'],
+    };
+    expect(category.name).toBe('Development');
+    expect(category.bookmarkIds).toHaveLength(3);
+  });
+
+  it('accepts CategoryEditAction for rename', () => {
+    const action: import('../types').CategoryEditAction = {
+      type: 'rename',
+      categoryId: 'cat-1',
+      newName: 'Programming',
+    };
+    expect(action.type).toBe('rename');
+  });
+
+  it('accepts CategoryEditAction for merge', () => {
+    const action: import('../types').CategoryEditAction = {
+      type: 'merge',
+      sourceCategoryId: 'cat-1',
+      targetCategoryId: 'cat-2',
+    };
+    expect(action.type).toBe('merge');
+  });
+
+  it('accepts CategoryEditAction for delete', () => {
+    const action: import('../types').CategoryEditAction = {
+      type: 'delete',
+      categoryId: 'cat-1',
+    };
+    expect(action.type).toBe('delete');
+  });
+});
