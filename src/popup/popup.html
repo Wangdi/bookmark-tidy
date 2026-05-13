@@ -100,6 +100,21 @@
       <button id="done-btn" class="btn primary">Done</button>
     </div>
 
+    <!-- Category Editor State -->
+    <div id="editor-state" class="state hidden">
+      <h2>Category Preview</h2>
+      <p class="editor-help">Review and edit categories before organizing</p>
+
+      <div id="category-tree" class="category-tree">
+        <!-- Categories will be rendered here -->
+      </div>
+
+      <div class="editor-actions">
+        <button id="regenerate-btn" class="btn secondary">🔄 Regenerate</button>
+        <button id="apply-btn" class="btn primary">✅ Apply Changes</button>
+      </div>
+    </div>
+
     <!-- ERROR State -->
     <div id="error-state" class="state hidden">
       <h1>📚 Bookmark Tidy</h1>
@@ -107,6 +122,21 @@
       <p id="error-message" class="error-message"></p>
       <button id="retry-btn" class="btn primary">Try Again</button>
     </div>
+
+    <!-- Category Item Template -->
+    <template id="category-template">
+      <div class="category-item">
+        <div class="category-header">
+          <span class="category-name"></span>
+          <span class="category-count"></span>
+        </div>
+        <div class="category-actions">
+          <button class="btn-edit" title="Rename">✏️</button>
+          <button class="btn-merge" title="Merge">🔀</button>
+          <button class="btn-delete" title="Delete">🗑️</button>
+        </div>
+      </div>
+    </template>
   </div>
 
   <script type="module" src="./index.ts"></script>
