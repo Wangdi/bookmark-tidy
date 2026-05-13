@@ -354,10 +354,26 @@ export async function handleReset() {
 export function handleProgressMessage(message: ProgressEvent): boolean {
   if (message.type === 'progress') {
     updateProgress(message.current, message.total, message.currentUrl);
+
+    // Update UI for trial mode
+    if (message.isTrialMode && message.trialInfo) {
+      const els = getElements();
+      els.progressCount.textContent = `Trial: ${message.current} of ${message.total} (of ${message.trialInfo.totalCount} total)`;
+    }
+
     return true;
   } else if (message.type === 'complete') {
     showResults(message.stats);
     showState('complete');
+
+    // Update completion message for trial mode
+    if (message.isTrialMode && message.trialInfo) {
+      const folderHint = document.querySelector('.folder-hint');
+      if (folderHint) {
+        folderHint.textContent = `Check ${message.trialInfo.folderName}`;
+      }
+    }
+
     return true;
   } else if (message.type === 'error') {
     // Don't show error state for user-initiated cancellation
