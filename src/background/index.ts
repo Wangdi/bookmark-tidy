@@ -1,10 +1,23 @@
 // src/background/index.ts
 
 import { RawBookmark, ProgressEvent, OrganizerState } from "../types";
-import { fetchBookmarks } from "../modules/fetcher";
+import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
-import { categorizeBookmarks } from "../modules/categorizer";
+import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
 import { organizeBookmarks } from "../modules/organizer";
+import {
+  storeFetched,
+  loadAllFetched,
+  clearAll,
+  saveCheckpoint,
+  loadCheckpoint,
+} from "../lib/storage";
+
+/**
+ * Configuration for two-phase processing
+ */
+const FETCH_BATCH_SIZE = 10;  // Number of URLs to fetch concurrently
+const SPARSE_THRESHOLD = 500; // Use sparse vectors for collections > 500 bookmarks
 
 /**
  * State manager - exported for testing
@@ -111,7 +124,9 @@ export async function sendProgress(event: ProgressEvent): Promise<void> {
 }
 
 /**
- * Run the organization pipeline
+ * Run the organization pipeline with two-phase processing
+ * Phase 1: Fetch bookmarks in batches and store to IndexedDB
+ * Phase 2: Load from IndexedDB, categorize, and organize
  */
 export async function runOrganization(): Promise<void> {
   if (state.isRunning) {
@@ -137,25 +152,99 @@ export async function runOrganization(): Promise<void> {
 
     const total = rawBookmarks.length;
 
-    // Step 2: Fetch all bookmarks
+    // Load checkpoint to see if we can resume
+    const checkpoint = await loadCheckpoint();
+
+    // ===== PHASE 1: FETCH TO STORAGE =====
+    if (!checkpoint || checkpoint.phase === 'fetching') {
+      const pending = checkpoint?.pendingIds
+        ? rawBookmarks.filter(b => checkpoint.pendingIds.includes(b.id))
+        : rawBookmarks;
+
+      const fetchedIds = checkpoint?.fetchedIds ?? [];
+
+      await sendProgress({
+        type: "progress",
+        current: fetchedIds.length,
+        total,
+        currentUrl: `Fetching bookmarks...`,
+      });
+
+      // Save initial checkpoint
+      await saveCheckpoint({
+        phase: 'fetching',
+        totalBookmarks: total,
+        fetchedIds,
+        pendingIds: pending.map(b => b.id),
+        startedAt: checkpoint?.startedAt ?? Date.now(),
+        lastUpdated: Date.now(),
+      });
+
+      // Fetch in batches
+      for (let i = 0; i < pending.length; i += FETCH_BATCH_SIZE) {
+        if (state.shouldAbort) {
+          await sendProgress({
+            type: "error",
+            current: 0,
+            total: 0,
+            error: "Operation cancelled",
+          });
+          return;
+        }
+
+        const batch = pending.slice(i, i + FETCH_BATCH_SIZE);
+
+        // Fetch batch concurrently
+        const results = await Promise.all(
+          batch.map(b => fetchBookmark(b))
+        );
+
+        // Store to IndexedDB
+        await storeFetched(results);
+
+        // Update checkpoint
+        fetchedIds.push(...batch.map(b => b.id));
+        await saveCheckpoint({
+          phase: 'fetching',
+          totalBookmarks: total,
+          fetchedIds,
+          pendingIds: pending.slice(i + FETCH_BATCH_SIZE).map(b => b.id),
+          startedAt: checkpoint?.startedAt ?? Date.now(),
+          lastUpdated: Date.now(),
+        });
+
+        // Update progress
+        state.current = fetchedIds.length;
+        state.total = total;
+        state.currentUrl = `Fetched ${fetchedIds.length}/${total}`;
+
+        await sendProgress({
+          type: "progress",
+          current: fetchedIds.length,
+          total,
+          currentUrl: `Fetched ${fetchedIds.length}/${total}`,
+        });
+      }
+    }
+
+    // ===== PHASE 2: CATEGORIZE AND ORGANIZE =====
+    // Update checkpoint to categorizing phase
+    const currentCheckpoint = await loadCheckpoint();
+    await saveCheckpoint({
+      ...currentCheckpoint!,
+      phase: 'categorizing',
+      lastUpdated: Date.now(),
+    });
+
     await sendProgress({
       type: "progress",
       current: 0,
-      total,
-      currentUrl: "Starting...",
+      total: 1,
+      currentUrl: "Loading fetched data...",
     });
 
-    const fetchResult = await fetchBookmarks(rawBookmarks, {
-      onProgress: async (current, total, url) => {
-        await sendProgress({
-          type: "progress",
-          current,
-          total,
-          currentUrl: url,
-        });
-      },
-      shouldAbort: () => state.shouldAbort,
-    });
+    // Load all fetched bookmarks from storage
+    const fetchedBookmarks = await loadAllFetched();
 
     if (state.shouldAbort) {
       await sendProgress({
@@ -167,19 +256,51 @@ export async function runOrganization(): Promise<void> {
       return;
     }
 
-    // Step 3: Deduplicate
-    const dedupeResult = dedupeBookmarks(fetchResult.bookmarks);
+    // Deduplicate
+    await sendProgress({
+      type: "progress",
+      current: 0,
+      total: 1,
+      currentUrl: "Deduplicating...",
+    });
+    const dedupeResult = dedupeBookmarks(fetchedBookmarks);
 
-    // Step 4: Categorize
-    const categorizeResult = categorizeBookmarks(dedupeResult.bookmarks);
+    // Categorize (use sparse vectors for large collections)
+    await sendProgress({
+      type: "progress",
+      current: 0,
+      total: 1,
+      currentUrl: "Categorizing...",
+    });
+    const categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
+      ? categorizeBookmarksSparse(dedupeResult.bookmarks)
+      : categorizeBookmarks(dedupeResult.bookmarks);
 
-    // Step 5: Organize
+    // Update checkpoint to organizing phase
+    await saveCheckpoint({
+      ...currentCheckpoint!,
+      phase: 'organizing',
+      lastUpdated: Date.now(),
+    });
+
+    // Organize
+    await sendProgress({
+      type: "progress",
+      current: 0,
+      total: 1,
+      currentUrl: "Organizing folders...",
+    });
+    const deadlinks = fetchedBookmarks.filter(b => b.status === 'deadlink');
+    const unreachable = fetchedBookmarks.filter(b => b.status === 'unreachable');
     const organizeResult = await organizeBookmarks(
       categorizeResult.bookmarks,
-      fetchResult.deadlinks,
-      fetchResult.unreachable,
+      deadlinks,
+      unreachable,
       dedupeResult.duplicatesMerged,
     );
+
+    // Clear storage and checkpoint
+    await clearAll();
 
     // Send completion
     await sendProgress({

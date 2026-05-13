@@ -92,7 +92,7 @@ export function classifyError(error: Error): 'deadlink' | 'unreachable' {
 /**
  * Fetch a single bookmark with timeout
  */
-async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBookmark> {
+export async function fetchBookmark(bookmark: RawBookmark): Promise<ProcessedBookmark> {
   // Validate URL first
   if (!isValidUrl(bookmark.url)) {
     return {

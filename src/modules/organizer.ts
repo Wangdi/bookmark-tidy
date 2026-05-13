@@ -6,6 +6,11 @@ export const ORGANIZED_FOLDER_NAME = '📁Organized';
 export const DEADLINKS_FOLDER_NAME = '⚠ Deadlinks';
 export const UNREACHABLE_FOLDER_NAME = '⚠ Unreachable';
 
+/**
+ * Number of bookmarks to create in parallel
+ */
+const CREATE_BATCH_SIZE = 10;
+
 export interface OrganizerResult {
   success: boolean;
   stats: {
@@ -104,6 +109,40 @@ async function createBookmark(
 }
 
 /**
+ * Create multiple bookmarks in parallel batches
+ * More efficient than sequential creation for large collections
+ */
+async function createBookmarksBatch(
+  bookmarks: CategorizedBookmark[],
+  folderId: string
+): Promise<void> {
+  for (let i = 0; i < bookmarks.length; i += CREATE_BATCH_SIZE) {
+    const batch = bookmarks.slice(i, i + CREATE_BATCH_SIZE);
+    await Promise.all(
+      batch.map(b => createBookmark(b.title, b.url, folderId))
+    );
+  }
+}
+
+/**
+ * Create multiple processed bookmarks in parallel batches (for deadlinks/unreachable)
+ */
+async function createProcessedBookmarksBatch(
+  bookmarks: ProcessedBookmark[],
+  folderId: string
+): Promise<void> {
+  for (let i = 0; i < bookmarks.length; i += CREATE_BATCH_SIZE) {
+    const batch = bookmarks.slice(i, i + CREATE_BATCH_SIZE);
+    await Promise.all(
+      batch.map(b => {
+        const title = b.error ? `${b.title} (${b.error})` : b.title;
+        return createBookmark(title, b.url, folderId);
+      })
+    );
+  }
+}
+
+/**
  * Organize bookmarks into folder structure
  */
 export async function organizeBookmarks(
@@ -147,51 +186,31 @@ export async function organizeBookmarks(
       for (const [subCategory, bookmarks] of subGroups) {
         if (subCategory === '__none__') {
           // Bookmarks without sub-category go directly in category folder
-          for (const bookmark of bookmarks) {
-            await createBookmark(bookmark.title, bookmark.url, categoryFolder.id);
-          }
+          await createBookmarksBatch(bookmarks, categoryFolder.id);
         } else {
           // Create sub-category folder
           const subFolder = await createFolder(subCategory, categoryFolder.id);
-
-          for (const bookmark of bookmarks) {
-            await createBookmark(bookmark.title, bookmark.url, subFolder.id);
-          }
+          await createBookmarksBatch(bookmarks, subFolder.id);
         }
       }
     } else {
       // Create category folder directly
       const categoryFolder = await createFolder(category, organizedFolder.id);
-
       const allBookmarks = Array.from(subGroups.values()).flat();
-      for (const bookmark of allBookmarks) {
-        await createBookmark(bookmark.title, bookmark.url, categoryFolder.id);
-      }
+      await createBookmarksBatch(allBookmarks, categoryFolder.id);
     }
   }
 
   // Create deadlinks folder if needed
   if (deadlinks.length > 0) {
     const deadlinksFolder = await createFolder(DEADLINKS_FOLDER_NAME, organizedFolder.id);
-
-    for (const bookmark of deadlinks) {
-      const title = bookmark.error
-        ? `${bookmark.title} (${bookmark.error})`
-        : bookmark.title;
-      await createBookmark(title, bookmark.url, deadlinksFolder.id);
-    }
+    await createProcessedBookmarksBatch(deadlinks, deadlinksFolder.id);
   }
 
   // Create unreachable folder if needed
   if (unreachable.length > 0) {
     const unreachableFolder = await createFolder(UNREACHABLE_FOLDER_NAME, organizedFolder.id);
-
-    for (const bookmark of unreachable) {
-      const title = bookmark.error
-        ? `${bookmark.title} (${bookmark.error})`
-        : bookmark.title;
-      await createBookmark(title, bookmark.url, unreachableFolder.id);
-    }
+    await createProcessedBookmarksBatch(unreachable, unreachableFolder.id);
   }
 
   // Calculate stats
