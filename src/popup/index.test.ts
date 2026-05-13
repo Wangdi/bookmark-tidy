@@ -6,6 +6,8 @@ import {
   countBookmarksInTree,
   handleProgressMessage,
   handleDone,
+  handleReset,
+  showStatusMessage,
   setElements,
   PopupElements,
 } from '../popup/index';
@@ -874,7 +876,8 @@ describe('popup', () => {
   });
 
   describe('handleReset', () => {
-    it('sends RESET message and updates bookmark count on success', async () => {
+    it('sends RESET message and shows success message then bookmark count', async () => {
+      vi.useFakeTimers();
       const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
       const mockGetTree = vi.fn().mockResolvedValue([{
         id: '0',
@@ -900,10 +903,16 @@ describe('popup', () => {
       await handleReset();
 
       expect(mockSendMessage).toHaveBeenCalledWith({ type: 'RESET' });
-      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+      // Should show success message immediately
+      expect(mockElements.bookmarkCount.textContent).toBe('✅ Data cleared successfully');
       expect(mockElements.resetBtn.textContent).toBe('Clear All Data');
       expect(mockElements.resetBtn.disabled).toBe(false);
 
+      // After 3 seconds, should show bookmark count
+      vi.advanceTimersByTime(3000);
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     });
 
@@ -999,6 +1008,104 @@ describe('popup', () => {
       expect(mockElements.resetBtn.textContent).toBe('Clear All Data');
       expect(mockElements.resetBtn.disabled).toBe(false);
 
+      vi.unstubAllGlobals();
+    });
+  });
+
+  describe('showStatusMessage', () => {
+    it('shows temporary status message that disappears after 3 seconds', async () => {
+      vi.useFakeTimers();
+
+      const { showStatusMessage, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      showStatusMessage('✅ Data cleared successfully', 3000);
+
+      // Message should be visible immediately
+      expect(mockElements.bookmarkCount.textContent).toBe('✅ Data cleared successfully');
+
+      // Message should still be visible after 2.9 seconds
+      vi.advanceTimersByTime(2900);
+      expect(mockElements.bookmarkCount.textContent).toBe('✅ Data cleared successfully');
+
+      // Message should be cleared after 3 seconds
+      vi.advanceTimersByTime(100);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+    });
+
+    it('can show different message durations', async () => {
+      vi.useFakeTimers();
+
+      const { showStatusMessage, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      showStatusMessage('Working...', 1000);
+
+      expect(mockElements.bookmarkCount.textContent).toBe('Working...');
+
+      vi.advanceTimersByTime(1000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+    });
+
+    it('replaces previous status message', async () => {
+      vi.useFakeTimers();
+
+      const { showStatusMessage, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      showStatusMessage('First message', 3000);
+      expect(mockElements.bookmarkCount.textContent).toBe('First message');
+
+      // Show new message before first one expires
+      vi.advanceTimersByTime(1000);
+      showStatusMessage('Second message', 3000);
+      expect(mockElements.bookmarkCount.textContent).toBe('Second message');
+
+      // Only the second message timer should be active
+      vi.advanceTimersByTime(3000);
+      expect(mockElements.bookmarkCount.textContent).toBe('');
+
+      vi.useRealTimers();
+    });
+
+    it('shows success message for 3 seconds after successful reset', async () => {
+      vi.useFakeTimers();
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true });
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: mockGetTree },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading',
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { handleReset, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await handleReset();
+
+      // Should show success message
+      expect(mockElements.bookmarkCount.textContent).toBe('✅ Data cleared successfully');
+
+      // After 3 seconds, should show bookmark count
+      vi.advanceTimersByTime(3000);
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+
+      vi.useRealTimers();
       vi.unstubAllGlobals();
     });
   });

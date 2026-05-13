@@ -119,6 +119,32 @@ export function showResults(stats: ProgressEvent['stats']) {
 }
 
 /**
+ * Show temporary status message (timer reference for cleanup)
+ */
+let statusMessageTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Show a temporary status message that disappears after specified duration
+ */
+export function showStatusMessage(message: string, durationMs: number) {
+  const els = getElements();
+
+  // Clear any existing timer
+  if (statusMessageTimer) {
+    clearTimeout(statusMessageTimer);
+  }
+
+  // Show message immediately
+  els.bookmarkCount.textContent = message;
+
+  // Clear message after duration
+  statusMessageTimer = setTimeout(() => {
+    els.bookmarkCount.textContent = '';
+    statusMessageTimer = null;
+  }, durationMs);
+}
+
+/**
  * Count bookmarks in tree (pure function for testability)
  */
 export function countBookmarksInTree(tree: chrome.bookmarks.BookmarkTreeNode[]): number {
@@ -228,9 +254,13 @@ export async function handleReset() {
     if (response && response.success) {
       els.resetBtn.textContent = 'Clear All Data';
       els.resetBtn.disabled = false;
-      // Update bookmark count after reset
+      // Show success message for 3 seconds, then update bookmark count
+      showStatusMessage('✅ Data cleared successfully', 3000);
       const count = await getBookmarkCount();
-      els.bookmarkCount.textContent = `${count} bookmarks found`;
+      // Update count after message timer
+      setTimeout(() => {
+        els.bookmarkCount.textContent = `${count} bookmarks found`;
+      }, 3000);
     } else {
       els.resetBtn.textContent = 'Clear All Data';
       els.resetBtn.disabled = false;
