@@ -250,16 +250,33 @@ export async function init() {
  * Start organization
  */
 export async function startOrganization() {
+  const els = getElements();
+
+  // Get and validate trial count
+  const totalCount = await getBookmarkCount();
+  const trialCount = getTrialCount();
+  const validation = validateTrialCount(trialCount, totalCount);
+
+  if (!validation.valid) {
+    // Show error message
+    showStatusMessage(`❌ ${validation.error}`, 3000);
+    return;
+  }
+
   showState('processing');
   updateProgress(0, 0, 'Starting...');
 
-  const response = await chrome.runtime.sendMessage({ type: 'START_ORGANIZE' });
+  const message = trialCount !== null
+    ? { type: 'START_ORGANIZE', maxBookmarks: trialCount }
+    : { type: 'START_ORGANIZE' };
+
+  const response = await chrome.runtime.sendMessage(message);
 
   // If operation didn't start (already running), show idle state
   if (response && response.started === false) {
     showState('idle');
     const count = await getBookmarkCount();
-    getElements().bookmarkCount.textContent = `${count} bookmarks found`;
+    els.bookmarkCount.textContent = `${count} bookmarks found`;
   }
 }
 
