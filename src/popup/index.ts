@@ -522,6 +522,15 @@ export async function handleReset() {
  */
 export function handleProgressMessage(message: ProgressEvent): boolean {
   if (message.type === 'progress') {
+    // Check if categories are available (show editor)
+    if (message.categories && message.categories.length > 0) {
+      showState('editor');
+      setCategories(message.categories);
+      renderCategoryTree(message.categories);
+      return true;
+    }
+
+    // Normal progress update
     updateProgress(message.current, message.total, message.currentUrl);
 
     // Update UI for trial mode

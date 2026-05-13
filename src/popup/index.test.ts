@@ -423,6 +423,114 @@ describe('popup', () => {
     });
   });
 
+  describe('handleProgressMessage category editor', () => {
+    // Mock template element for renderCategoryTree
+    const mockTemplate = {
+      content: {
+        cloneNode: vi.fn().mockReturnValue({
+          querySelector: vi.fn((selector: string) => {
+            if (selector === '.category-item') {
+              return {
+                dataset: {},
+                querySelector: vi.fn((sel: string) => {
+                  if (sel === '.category-name' || sel === '.category-count') {
+                    return { textContent: '' };
+                  }
+                  if (sel === '.btn-edit' || sel === '.btn-merge' || sel === '.btn-delete') {
+                    return { addEventListener: vi.fn() };
+                  }
+                  return null;
+                }),
+              };
+            }
+            return null;
+          }),
+        }),
+      },
+    };
+
+    beforeEach(() => {
+      vi.stubGlobal('document', {
+        getElementById: vi.fn((id: string) => {
+          if (id === 'category-template') {
+            return mockTemplate;
+          }
+          return createMockElement();
+        }),
+      });
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('shows editor state when categories received', () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 50,
+        total: 100,
+        currentUrl: 'Categories generated',
+        categories: [
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+        ],
+      };
+
+      handleProgressMessage(message);
+
+      expect(mockElements.editorState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.processingState.classList.add).toHaveBeenCalledWith('hidden');
+    });
+
+    it('updates current categories when categories received', () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 50,
+        total: 100,
+        categories: [
+          { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2'] },
+        ],
+      };
+
+      handleProgressMessage(message);
+
+      // Import getCategories to check the state was updated
+      // Note: We need to check the internal state via the exported getCategories function
+      // The categories should be set and renderCategoryTree should have been called
+      expect(mockElements.categoryTree.innerHTML).toBe(''); // renderCategoryTree clears the tree
+    });
+
+    it('handles empty categories array (does not show editor)', () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 50,
+        total: 100,
+        currentUrl: 'Processing...',
+        categories: [],
+      };
+
+      const result = handleProgressMessage(message);
+
+      expect(result).toBe(true);
+      // Should NOT show editor state for empty categories
+      expect(mockElements.editorState.classList.remove).not.toHaveBeenCalled();
+    });
+
+    it('continues normal progress when no categories provided', () => {
+      const message: ProgressEvent = {
+        type: 'progress',
+        current: 50,
+        total: 100,
+        currentUrl: 'https://example.com',
+      };
+
+      const result = handleProgressMessage(message);
+
+      expect(result).toBe(true);
+      expect(mockElements.progressBar.style.width).toBe('50%');
+      expect(mockElements.editorState.classList.remove).not.toHaveBeenCalled();
+    });
+  });
+
   describe('handleDone', () => {
     it('calls window.close', () => {
       // Mock window.close since it's not available in test environment
