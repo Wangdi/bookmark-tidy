@@ -5,6 +5,7 @@ import {
   DEADLINKS_FOLDER_NAME,
   UNREACHABLE_FOLDER_NAME,
 } from '../modules/organizer';
+import { vi } from 'vitest';
 
 // Helper to create a minimal BookmarkTreeNode for testing
 type PartialBookmarkTreeNode = Partial<chrome.bookmarks.BookmarkTreeNode> & {
@@ -126,5 +127,49 @@ describe('organizer', () => {
     it('UNREACHABLE_FOLDER_NAME is set correctly', () => {
       expect(UNREACHABLE_FOLDER_NAME).toBe('⚠ Unreachable');
     });
+  });
+});
+
+describe('organizeBookmarks custom folder name', () => {
+  it('accepts custom folder name parameter', async () => {
+    const mockCreate = vi.fn().mockResolvedValue({ id: '1', title: 'Test' });
+    vi.stubGlobal('chrome', {
+      bookmarks: {
+        getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]),
+        removeTree: vi.fn(),
+        create: mockCreate,
+      },
+      runtime: { lastError: null },
+    });
+
+    const { organizeBookmarks } = await import('../modules/organizer');
+    await organizeBookmarks([], [], [], 0, '📁Organized (Trial 25) - 2026-05-14');
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '📁Organized (Trial 25) - 2026-05-14' })
+    );
+
+    vi.unstubAllGlobals();
+  });
+
+  it('uses default folder name when not specified', async () => {
+    const mockCreate = vi.fn().mockResolvedValue({ id: '1', title: 'Test' });
+    vi.stubGlobal('chrome', {
+      bookmarks: {
+        getTree: vi.fn().mockResolvedValue([{ id: '0', title: 'Root', children: [] }]),
+        removeTree: vi.fn(),
+        create: mockCreate,
+      },
+      runtime: { lastError: null },
+    });
+
+    const { organizeBookmarks } = await import('../modules/organizer');
+    await organizeBookmarks([], [], [], 0);
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ title: '📁Organized' })
+    );
+
+    vi.unstubAllGlobals();
   });
 });
