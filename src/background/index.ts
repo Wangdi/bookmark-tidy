@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics, EditedCategory, CategoryEditAction } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics, EditedCategory, CategoryEditAction, CategorizedBookmark } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -12,6 +12,7 @@ import {
   saveCheckpoint,
   loadCheckpoint,
   saveEditedCategories,
+  getEditedCategories,
   clearEditedCategories,
 } from "../lib/storage";
 
@@ -20,6 +21,14 @@ import {
  */
 const FETCH_BATCH_SIZE = 10;  // Number of URLs to fetch concurrently
 const SPARSE_THRESHOLD = 500; // Use sparse vectors for collections > 500 bookmarks
+
+/**
+ * Category editor configuration (exported for testing)
+ */
+export const config = {
+  categoryEditTimeoutMs: 300000, // 5 minutes
+  categoryEditPollIntervalMs: 500, // Poll every 500ms
+};
 
 /**
  * Trial mode configuration
@@ -153,6 +162,59 @@ export function applyCategoryEdit(
       return result;
     }
   }
+}
+
+/**
+ * Convert CategorizedBookmark array to EditedCategory array
+ * Groups bookmarks by category and creates EditedCategory objects
+ */
+export function convertToEditedCategories(bookmarks: CategorizedBookmark[]): EditedCategory[] {
+  const categoryMap = new Map<string, string[]>();
+
+  for (const bookmark of bookmarks) {
+    const categoryName = bookmark.category || 'Uncategorized';
+    if (!categoryMap.has(categoryName)) {
+      categoryMap.set(categoryName, []);
+    }
+    categoryMap.get(categoryName)!.push(bookmark.id);
+  }
+
+  return Array.from(categoryMap.entries()).map(([name, bookmarkIds]) => ({
+    id: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    bookmarkIds,
+  }));
+}
+
+/**
+ * Convert EditedCategory array back to CategorizedBookmark array
+ * Uses the original bookmarks to preserve all bookmark data
+ */
+export function convertFromEditedCategories(
+  editedCategories: EditedCategory[],
+  originalBookmarks: CategorizedBookmark[]
+): CategorizedBookmark[] {
+  const result: CategorizedBookmark[] = [];
+  const processedIds = new Set<string>();
+
+  for (const category of editedCategories) {
+    for (const bookmarkId of category.bookmarkIds) {
+      const original = originalBookmarks.find(b => b.id === bookmarkId);
+      if (original && !processedIds.has(bookmarkId)) {
+        result.push({ ...original, category: category.name });
+        processedIds.add(bookmarkId);
+      }
+    }
+  }
+
+  // Add any bookmarks that weren't in edited categories (shouldn't happen normally)
+  for (const bookmark of originalBookmarks) {
+    if (!processedIds.has(bookmark.id)) {
+      result.push(bookmark);
+    }
+  }
+
+  return result;
 }
 
 /**
@@ -620,6 +682,60 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
       ? categorizeBookmarksSparse(dedupeResult.bookmarks)
       : categorizeBookmarks(dedupeResult.bookmarks);
 
+    // ===== CATEGORY EDITOR: Convert categories and send for editing =====
+    const originalCategories = convertToEditedCategories(categorizeResult.bookmarks);
+
+    // Send categories to UI for editing
+    await sendProgress({
+      type: "progress",
+      current: 0,
+      total: 1,
+      currentUrl: "Categories generated - waiting for review",
+      categories: originalCategories,
+    });
+
+    // Clear any previous edited categories before waiting
+    await clearEditedCategories();
+
+    // Wait for user edits with timeout (5 minutes)
+    const CATEGORY_EDIT_TIMEOUT = config.categoryEditTimeoutMs;
+    const CATEGORY_EDIT_POLL_INTERVAL = config.categoryEditPollIntervalMs;
+    const editStartTime = Date.now();
+    let editedCategories: EditedCategory[] = [];
+    let hasUserEdits = false;
+
+    while (!hasUserEdits && Date.now() - editStartTime < CATEGORY_EDIT_TIMEOUT) {
+      if (state.shouldAbort) {
+        await sendProgress({
+          type: "error",
+          current: 0,
+          total: 0,
+          error: "Operation cancelled",
+        });
+        return true;
+      }
+
+      editedCategories = await getEditedCategories();
+      if (editedCategories.length > 0) {
+        hasUserEdits = true;
+        break;
+      }
+
+      // Wait before checking again
+      await new Promise(resolve => setTimeout(resolve, CATEGORY_EDIT_POLL_INTERVAL));
+    }
+
+    // Use edited categories if available, otherwise use original
+    let finalBookmarks: CategorizedBookmark[];
+    if (hasUserEdits && editedCategories.length > 0) {
+      finalBookmarks = convertFromEditedCategories(editedCategories, categorizeResult.bookmarks);
+    } else {
+      finalBookmarks = categorizeResult.bookmarks;
+    }
+
+    // Clear edited categories for next run
+    await clearEditedCategories();
+
     // Update checkpoint to organizing phase
     await saveCheckpoint({
       ...currentCheckpoint!,
@@ -643,7 +759,7 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
       : '📁Organized';
 
     const organizeResult = await organizeBookmarks(
-      categorizeResult.bookmarks,
+      finalBookmarks,
       deadlinks,
       unreachable,
       dedupeResult.duplicatesMerged,
