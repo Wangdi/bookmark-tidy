@@ -488,3 +488,22 @@ describe('background unit tests', () => {
     });
   });
 });
+
+describe('UserPreferences type', () => {
+  it('has autoNavigate property with default true', () => {
+    const prefs: import('../types').UserPreferences = {
+      autoNavigate: true,
+    };
+    expect(prefs.autoNavigate).toBe(true);
+  });
+});
+
+describe('OrganizedFolderInfo type', () => {
+  it('contains folder ID and title', () => {
+    const info: import('../types').OrganizedFolderInfo = {
+      id: '123',
+      title: '📁Organized',
+    };
+    expect(info.id).toBe('123');
+  });
+});

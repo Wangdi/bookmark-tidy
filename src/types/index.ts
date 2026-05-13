@@ -82,3 +82,13 @@ export interface NotificationPayload {
   };
   error?: string;
 }
+
+export interface UserPreferences {
+  autoNavigate?: boolean;  // undefined or true = enabled, false = disabled
+}
+
+export interface OrganizedFolderInfo {
+  id: string;
+  title: string;
+  isTrial?: boolean;
+}
