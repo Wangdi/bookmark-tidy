@@ -35,6 +35,10 @@ export interface PopupElements {
   categorizationMetrics: HTMLElement;
   organizationMetrics: HTMLElement;
   performanceMetrics: HTMLElement;
+  editorState: HTMLElement;
+  categoryTree: HTMLElement;
+  regenerateBtn: HTMLButtonElement;
+  applyBtn: HTMLButtonElement;
 }
 
 /**
@@ -70,6 +74,10 @@ export function getElements(): PopupElements {
       categorizationMetrics: document.getElementById('categorization-metrics')!,
       organizationMetrics: document.getElementById('organization-metrics')!,
       performanceMetrics: document.getElementById('performance-metrics')!,
+      editorState: document.getElementById('editor-state')!,
+      categoryTree: document.getElementById('category-tree')!,
+      regenerateBtn: document.getElementById('regenerate-btn')! as HTMLButtonElement,
+      applyBtn: document.getElementById('apply-btn')! as HTMLButtonElement,
     };
   }
   return elements;

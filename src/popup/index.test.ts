@@ -91,6 +91,10 @@ function createMockElements(): PopupElements {
     categorizationMetrics: createMockElement(),
     organizationMetrics: createMockElement(),
     performanceMetrics: createMockElement(),
+    editorState: createMockElement(),
+    categoryTree: createMockElement(),
+    regenerateBtn: createMockButton(),
+    applyBtn: createMockButton(),
   };
 }
 
@@ -1080,6 +1084,63 @@ describe('popup', () => {
       };
       expect(elements.trialCount).toBeDefined();
       expect(elements.trialError).toBeDefined();
+    });
+  });
+
+  describe('category editor elements', () => {
+    it('includes editorState, categoryTree, regenerateBtn, applyBtn in PopupElements', async () => {
+      // Import PopupElements type to verify the interface includes editor elements
+      // This test will fail at compile time if the interface doesn't have these properties
+      type TestPopupElements = import('../popup/index').PopupElements;
+
+      // Create an object that matches PopupElements - TypeScript will error if properties are missing
+      const elements: TestPopupElements = {
+        idleState: {} as HTMLElement,
+        processingState: {} as HTMLElement,
+        completeState: {} as HTMLElement,
+        errorState: {} as HTMLElement,
+        startBtn: {} as HTMLButtonElement,
+        cancelBtn: {} as HTMLButtonElement,
+        doneBtn: {} as HTMLButtonElement,
+        retryBtn: {} as HTMLButtonElement,
+        resetBtn: {} as HTMLButtonElement,
+        bookmarkCount: {} as HTMLElement,
+        progressBar: {} as HTMLElement,
+        progressText: {} as HTMLElement,
+        currentUrl: {} as HTMLElement,
+        progressCount: {} as HTMLElement,
+        resultsList: {} as HTMLElement,
+        errorMessage: {} as HTMLElement,
+        trialCount: {} as HTMLInputElement,
+        trialError: {} as HTMLElement,
+        notificationToggle: {} as HTMLInputElement,
+        autoNavigateToggle: {} as HTMLInputElement,
+        detailsToggle: {} as HTMLButtonElement,
+        detailsPanel: {} as HTMLElement,
+        fetchMetrics: {} as HTMLElement,
+        storageMetrics: {} as HTMLElement,
+        categorizationMetrics: {} as HTMLElement,
+        organizationMetrics: {} as HTMLElement,
+        performanceMetrics: {} as HTMLElement,
+        editorState: {} as HTMLElement,
+        categoryTree: {} as HTMLElement,
+        regenerateBtn: {} as HTMLButtonElement,
+        applyBtn: {} as HTMLButtonElement,
+      };
+
+      expect(elements.editorState).toBeDefined();
+      expect(elements.categoryTree).toBeDefined();
+      expect(elements.regenerateBtn).toBeDefined();
+      expect(elements.applyBtn).toBeDefined();
+    });
+
+    it('createMockElements includes category editor elements', () => {
+      const elements = createMockElements();
+
+      expect(elements.editorState).toBeDefined();
+      expect(elements.categoryTree).toBeDefined();
+      expect(elements.regenerateBtn).toBeDefined();
+      expect(elements.applyBtn).toBeDefined();
     });
   });
 

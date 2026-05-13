@@ -77,6 +77,10 @@ function createMockElements(): PopupElements {
     categorizationMetrics: createMockElement(),
     organizationMetrics: createMockElement(),
     performanceMetrics: createMockElement(),
+    editorState: createMockElement(),
+    categoryTree: createMockElement(),
+    regenerateBtn: createMockButton(),
+    applyBtn: createMockButton(),
   };
 }
 
