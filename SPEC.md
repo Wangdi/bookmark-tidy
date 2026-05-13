@@ -185,6 +185,14 @@ When user clicks cancel:
 4. **Consistent popup state**: On popup close/reopen, state shows cleared progress (0/0) even if background is still winding down
 5. **Popup shows idle state**: When background sends "Operation cancelled" error, popup shows idle state instead of error state (user intentionally cancelled)
 
+### Start/Cancel Race Condition
+
+When user quickly presses start/cancel/start:
+
+1. **START_ORGANIZE returns `started`**: Background returns `{ success: true, started: true/false }` indicating if operation started
+2. **Popup handles `started: false`**: If operation didn't start (already running), popup reverts to idle state
+3. **No stale state**: This prevents popup showing "0/0" when cancellation is still winding down
+
 ```typescript
 // cancelOperation() implementation
 export function cancelOperation(): void {
@@ -201,6 +209,12 @@ export function cancelOperation(): void {
 if (message.type === 'error' && message.error === 'Operation cancelled') {
   showState('idle');  // Not an error - user cancelled intentionally
   return true;
+}
+
+// startOrganization handles started: false
+const response = await chrome.runtime.sendMessage({ type: 'START_ORGANIZE' });
+if (response && response.started === false) {
+  showState('idle');  // Didn't start - already running
 }
 ```
 

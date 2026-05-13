@@ -220,12 +220,15 @@ describe('background unit tests', () => {
       expect(state.shouldAbort).toBe(true);
     });
 
-    it('responds to START_ORGANIZE', () => {
+    it('responds to START_ORGANIZE', async () => {
       const sendResponse = vi.fn();
 
       handleMessage({ type: 'START_ORGANIZE' }, {} as chrome.runtime.MessageSender, sendResponse);
 
-      expect(sendResponse).toHaveBeenCalledWith({ success: true });
+      // Wait for async response
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(sendResponse).toHaveBeenCalledWith({ success: true, started: true });
     });
 
     it('returns true to keep message channel open', () => {

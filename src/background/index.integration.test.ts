@@ -7,6 +7,7 @@ import {
   resetState,
   state,
   cancelOperation,
+  handleMessage,
 } from '../background/index';
 
 // Mock Chrome APIs
@@ -388,6 +389,38 @@ describe('background integration tests', () => {
       setupMessageListener();
 
       expect(mockAddListener).toHaveBeenCalled();
+    });
+  });
+
+  describe('handleMessage START_ORGANIZE', () => {
+    it('returns started: true when operation starts', async () => {
+      const responses: unknown[] = [];
+      const sendResponse = (response: unknown) => {
+        responses.push(response);
+      };
+
+      handleMessage({ type: 'START_ORGANIZE' }, {} as chrome.runtime.MessageSender, sendResponse);
+
+      // Wait for runOrganization to start
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(responses[0]).toEqual({ success: true, started: true });
+    });
+
+    it('returns started: false when already running', async () => {
+      state.isRunning = true;
+
+      const responses: unknown[] = [];
+      const sendResponse = (response: unknown) => {
+        responses.push(response);
+      };
+
+      handleMessage({ type: 'START_ORGANIZE' }, {} as chrome.runtime.MessageSender, sendResponse);
+
+      // Need to wait for promise microtask to complete
+      await Promise.resolve();
+
+      expect(responses[0]).toEqual({ success: true, started: false });
     });
   });
 

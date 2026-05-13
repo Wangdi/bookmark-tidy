@@ -176,7 +176,14 @@ export async function startOrganization() {
   showState('processing');
   updateProgress(0, 0, 'Starting...');
 
-  await chrome.runtime.sendMessage({ type: 'START_ORGANIZE' });
+  const response = await chrome.runtime.sendMessage({ type: 'START_ORGANIZE' });
+
+  // If operation didn't start (already running), show idle state
+  if (response && response.started === false) {
+    showState('idle');
+    const count = await getBookmarkCount();
+    getElements().bookmarkCount.textContent = `${count} bookmarks found`;
+  }
 }
 
 /**

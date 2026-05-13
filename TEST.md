@@ -457,7 +457,7 @@ function createMockElements(): PopupElements {
 | `handleProgressMessage` | 消息处理（progress、complete、error、unknown、"Operation cancelled" 特殊处理） |
 | `handleDone` | 关闭窗口 |
 | `getElements` | 懒加载 DOM 元素 |
-| `startOrganization` | 开始组织（发送 START_ORGANIZE 消息） |
+| `startOrganization` | 开始组织（发送 START_ORGANIZE 消息，处理 started: false 响应） |
 | `cancelOrganization` | 取消组织（发送 CANCEL 消息，恢复 idle 状态） |
 | `handleRetry` | 重试（调用 startOrganization） |
 | `setupMessageListener` | 消息监听器注册 |
@@ -505,6 +505,22 @@ it('does NOT show error state for "Operation cancelled" error', () => {
   expect(result).toBe(true);
   expect(mockElements.errorState.classList.remove).not.toHaveBeenCalledWith('hidden');
   // 应该显示 idle 状态
+  expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+});
+
+// 测试 startOrganization 处理 started: false
+it('shows idle state when started: false is returned', async () => {
+  const mockSendMessage = vi.fn().mockResolvedValue({ success: true, started: false });
+
+  vi.stubGlobal('chrome', {
+    runtime: { sendMessage: mockSendMessage },
+    bookmarks: { getTree: vi.fn().mockResolvedValue([...]) },
+  });
+
+  await startOrganization();
+
+  // 应该先显示 processing，然后恢复到 idle
+  expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
   expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
 });
 ```

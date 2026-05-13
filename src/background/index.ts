@@ -132,10 +132,11 @@ export async function sendProgress(event: ProgressEvent): Promise<void> {
  * Run the organization pipeline with two-phase processing
  * Phase 1: Fetch bookmarks in batches and store to IndexedDB
  * Phase 2: Load from IndexedDB, categorize, and organize
+ * @returns true if operation started, false if already running
  */
-export async function runOrganization(): Promise<void> {
+export async function runOrganization(): Promise<boolean> {
   if (state.isRunning) {
-    return;
+    return false;
   }
 
   state.isRunning = true;
@@ -152,7 +153,7 @@ export async function runOrganization(): Promise<void> {
         total: 0,
         error: "No bookmarks found",
       });
-      return;
+      return true;
     }
 
     const total = rawBookmarks.length;
@@ -194,7 +195,7 @@ export async function runOrganization(): Promise<void> {
             total: 0,
             error: "Operation cancelled",
           });
-          return;
+          return true;
         }
 
         const batch = pending.slice(i, i + FETCH_BATCH_SIZE);
@@ -219,7 +220,7 @@ export async function runOrganization(): Promise<void> {
             total: 0,
             error: "Operation cancelled",
           });
-          return;
+          return true;
         }
 
         // Store to IndexedDB
@@ -277,7 +278,7 @@ export async function runOrganization(): Promise<void> {
         total: 0,
         error: "Operation cancelled",
       });
-      return;
+      return true;
     }
 
     // Deduplicate
@@ -344,6 +345,8 @@ export async function runOrganization(): Promise<void> {
     state.isRunning = false;
     state.shouldAbort = false;
   }
+
+  return true;
 }
 
 /**
@@ -379,8 +382,10 @@ export function handleMessage(
   sendResponse: (response?: unknown) => void
 ): boolean {
   if (message.type === "START_ORGANIZE") {
-    runOrganization();
-    sendResponse({ success: true });
+    runOrganization().then(started => {
+      sendResponse({ success: true, started });
+    });
+    return true; // Keep message channel open for async response
   } else if (message.type === "CANCEL") {
     cancelOperation();
     sendResponse({ success: true });

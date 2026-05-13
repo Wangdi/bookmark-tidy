@@ -422,6 +422,39 @@ describe('popup', () => {
 
       vi.unstubAllGlobals();
     });
+
+    it('shows idle state when started: false is returned', async () => {
+      const mockSendMessage = vi.fn().mockResolvedValue({ success: true, started: false });
+      const mockGetTree = vi.fn().mockResolvedValue([{
+        id: '0',
+        title: 'Root',
+        children: [{ id: '1', title: 'Bookmark', url: 'https://example.com' }],
+      }]);
+
+      vi.stubGlobal('chrome', {
+        runtime: { sendMessage: mockSendMessage, onMessage: { addListener: vi.fn() } },
+        bookmarks: { getTree: mockGetTree },
+      });
+      vi.stubGlobal('document', {
+        getElementById: vi.fn().mockReturnValue(createMockElement()),
+        readyState: 'loading', // Prevent auto-setup
+        addEventListener: vi.fn(),
+      });
+      vi.stubGlobal('window', {});
+
+      vi.resetModules();
+      const { startOrganization, setElements: newSetElements } = await import('../popup/index');
+      newSetElements(mockElements);
+
+      await startOrganization();
+
+      // Should have shown processing first, then reverted to idle
+      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.bookmarkCount.textContent).toBe('1 bookmarks found');
+
+      vi.unstubAllGlobals();
+    });
   });
 
   describe('cancelOrganization', () => {
