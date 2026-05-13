@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics, EditedCategory, CategoryEditAction } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -90,6 +90,67 @@ export function resetState(): void {
   state.total = 0;
   state.currentUrl = undefined;
   state.isTrialMode = false;
+}
+
+/**
+ * Apply a category edit action (rename, merge, delete)
+ */
+export function applyCategoryEdit(
+  categories: EditedCategory[],
+  action: CategoryEditAction
+): EditedCategory[] {
+  switch (action.type) {
+    case 'rename': {
+      const category = categories.find(c => c.id === action.categoryId);
+      if (!category) throw new Error('Category not found');
+
+      return categories.map(c =>
+        c.id === action.categoryId ? { ...c, name: action.newName } : c
+      );
+    }
+
+    case 'merge': {
+      const source = categories.find(c => c.id === action.sourceCategoryId);
+      const target = categories.find(c => c.id === action.targetCategoryId);
+
+      if (!source || !target) throw new Error('Category not found');
+
+      return categories
+        .filter(c => c.id !== action.sourceCategoryId)
+        .map(c =>
+          c.id === action.targetCategoryId
+            ? { ...c, bookmarkIds: [...c.bookmarkIds, ...source.bookmarkIds] }
+            : c
+        );
+    }
+
+    case 'delete': {
+      const category = categories.find(c => c.id === action.categoryId);
+      if (!category) throw new Error('Category not found');
+
+      const bookmarkIds = category.bookmarkIds;
+      let result = categories.filter(c => c.id !== action.categoryId);
+
+      if (bookmarkIds.length > 0) {
+        const uncategorized = result.find(c => c.name === 'Uncategorized');
+        if (uncategorized) {
+          result = result.map(c =>
+            c.name === 'Uncategorized'
+              ? { ...c, bookmarkIds: [...c.bookmarkIds, ...bookmarkIds] }
+              : c
+          );
+        } else {
+          result.push({
+            id: 'uncategorized',
+            name: 'Uncategorized',
+            bookmarkIds,
+          });
+        }
+      }
+
+      return result;
+    }
+  }
 }
 
 /**

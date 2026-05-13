@@ -1026,3 +1026,156 @@ describe('ProgressEvent category structure', () => {
     expect(event.stats?.categories).toBe(15);
   });
 });
+
+describe('applyCategoryEdit', () => {
+  const createCategory = (id: string, name: string, bookmarkIds: string[] = []): import('../types').EditedCategory => ({
+    id,
+    name,
+    bookmarkIds,
+  });
+
+  it('renames category', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', ['bm-1']),
+      createCategory('cat-2', 'News', ['bm-2']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'rename',
+      categoryId: 'cat-1',
+      newName: 'Programming',
+    });
+
+    expect(result[0].name).toBe('Programming');
+    expect(result[1].name).toBe('News');
+  });
+
+  it('merges two categories', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', ['bm-1', 'bm-2']),
+      createCategory('cat-2', 'Programming', ['bm-3']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'merge',
+      sourceCategoryId: 'cat-1',
+      targetCategoryId: 'cat-2',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe('cat-2');
+    expect(result[0].bookmarkIds).toEqual(['bm-3', 'bm-1', 'bm-2']);
+  });
+
+  it('deletes category and moves bookmarks to Uncategorized', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', ['bm-1', 'bm-2']),
+      createCategory('cat-2', 'News', ['bm-3']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'delete',
+      categoryId: 'cat-1',
+    });
+
+    expect(result).toHaveLength(2);
+    expect(result.find(c => c.id === 'cat-1')).toBeUndefined();
+    const uncategorized = result.find(c => c.name === 'Uncategorized');
+    expect(uncategorized?.bookmarkIds).toEqual(['bm-1', 'bm-2']);
+  });
+
+  it('throws error for invalid category ID on rename', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [createCategory('cat-1', 'Test', [])];
+
+    expect(() => applyCategoryEdit(categories, {
+      type: 'rename',
+      categoryId: 'invalid',
+      newName: 'New',
+    })).toThrow('Category not found');
+  });
+
+  it('throws error for invalid source category ID on merge', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [createCategory('cat-1', 'Test', [])];
+
+    expect(() => applyCategoryEdit(categories, {
+      type: 'merge',
+      sourceCategoryId: 'invalid',
+      targetCategoryId: 'cat-1',
+    })).toThrow('Category not found');
+  });
+
+  it('throws error for invalid target category ID on merge', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [createCategory('cat-1', 'Test', [])];
+
+    expect(() => applyCategoryEdit(categories, {
+      type: 'merge',
+      sourceCategoryId: 'cat-1',
+      targetCategoryId: 'invalid',
+    })).toThrow('Category not found');
+  });
+
+  it('throws error for invalid category ID on delete', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [createCategory('cat-1', 'Test', [])];
+
+    expect(() => applyCategoryEdit(categories, {
+      type: 'delete',
+      categoryId: 'invalid',
+    })).toThrow('Category not found');
+  });
+
+  it('creates Uncategorized folder when deleting category with bookmarks if none exists', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', ['bm-1']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'delete',
+      categoryId: 'cat-1',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Uncategorized');
+    expect(result[0].bookmarkIds).toEqual(['bm-1']);
+  });
+
+  it('deletes empty category without creating Uncategorized', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', []),
+      createCategory('cat-2', 'News', ['bm-1']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'delete',
+      categoryId: 'cat-1',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result.find(c => c.name === 'Uncategorized')).toBeUndefined();
+  });
+
+  it('adds to existing Uncategorized when deleting another category', async () => {
+    const { applyCategoryEdit } = await import('../background/index');
+    const categories = [
+      createCategory('cat-1', 'Development', ['bm-1']),
+      createCategory('uncat', 'Uncategorized', ['bm-2']),
+    ];
+
+    const result = applyCategoryEdit(categories, {
+      type: 'delete',
+      categoryId: 'cat-1',
+    });
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('Uncategorized');
+    expect(result[0].bookmarkIds).toEqual(['bm-2', 'bm-1']);
+  });
+});
