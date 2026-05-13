@@ -70,6 +70,13 @@ function createMockElements(): PopupElements {
     trialError: createMockElement(),
     notificationToggle: createMockInput(),
     autoNavigateToggle: createMockInput(),
+    detailsToggle: createMockButton(),
+    detailsPanel: createMockElement(),
+    fetchMetrics: createMockElement(),
+    storageMetrics: createMockElement(),
+    categorizationMetrics: createMockElement(),
+    organizationMetrics: createMockElement(),
+    performanceMetrics: createMockElement(),
   };
 }
 

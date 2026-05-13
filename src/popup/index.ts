@@ -28,6 +28,13 @@ export interface PopupElements {
   trialError: HTMLElement;
   notificationToggle: HTMLInputElement;
   autoNavigateToggle: HTMLInputElement;
+  detailsToggle: HTMLButtonElement;
+  detailsPanel: HTMLElement;
+  fetchMetrics: HTMLElement;
+  storageMetrics: HTMLElement;
+  categorizationMetrics: HTMLElement;
+  organizationMetrics: HTMLElement;
+  performanceMetrics: HTMLElement;
 }
 
 /**
@@ -56,6 +63,13 @@ export function getElements(): PopupElements {
       trialError: document.getElementById('trial-error')!,
       notificationToggle: document.getElementById('notification-toggle')! as HTMLInputElement,
       autoNavigateToggle: document.getElementById('auto-navigate-toggle')! as HTMLInputElement,
+      detailsToggle: document.getElementById('details-toggle')! as HTMLButtonElement,
+      detailsPanel: document.getElementById('details-panel')!,
+      fetchMetrics: document.getElementById('fetch-metrics')!,
+      storageMetrics: document.getElementById('storage-metrics')!,
+      categorizationMetrics: document.getElementById('categorization-metrics')!,
+      organizationMetrics: document.getElementById('organization-metrics')!,
+      performanceMetrics: document.getElementById('performance-metrics')!,
     };
   }
   return elements;

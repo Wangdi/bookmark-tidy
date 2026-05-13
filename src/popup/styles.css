@@ -280,3 +280,46 @@ h1 {
   font-size: 12px;
   color: var(--text-secondary, #666);
 }
+
+/* Details panel styles */
+.btn.text {
+  background: none;
+  border: none;
+  color: var(--primary-color, #4285f4);
+  cursor: pointer;
+  padding: 4px 8px;
+  font-size: 13px;
+  text-decoration: underline;
+}
+
+.btn.text:hover {
+  opacity: 0.8;
+}
+
+.details-panel {
+  margin-top: 8px;
+  padding: 12px;
+  background: var(--bg-secondary, #f5f5f5);
+  border-radius: 8px;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.details-section {
+  margin-bottom: 8px;
+}
+
+.details-section h4 {
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--text-secondary, #666);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.metrics-content {
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--text-primary, #333);
+  line-height: 1.6;
+}
