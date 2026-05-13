@@ -586,6 +586,16 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
         stats: organizeResult.stats,
       });
     }
+
+    // Auto-navigate to bookmarks manager if enabled
+    const userPrefs = await getUserPreferences();
+    if (userPrefs.autoNavigate !== false) {
+      const targetFolderName = isTrialMode && trialInfo ? trialInfo.folderName : '📁Organized';
+      const folderInfo = await findFolderByTitle(targetFolderName);
+      if (folderInfo) {
+        await navigateToBookmarksManager(folderInfo.id);
+      }
+    }
   } catch (error) {
     const errorMessage = (error as Error).message;
     await sendProgress({
