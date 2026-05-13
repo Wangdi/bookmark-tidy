@@ -50,6 +50,15 @@ function createMockButton(): HTMLButtonElement {
   } as unknown as HTMLButtonElement;
 }
 
+// Helper to create mock input element
+function createMockInput(): HTMLInputElement {
+  return {
+    ...createMockElement(),
+    value: '',
+    checked: false,
+  } as unknown as HTMLInputElement;
+}
+
 // Helper to create mock elements
 function createMockElements(): PopupElements {
   return {
@@ -69,6 +78,8 @@ function createMockElements(): PopupElements {
     progressCount: createMockElement(),
     resultsList: createMockElement(),
     errorMessage: createMockElement(),
+    trialCount: createMockInput(),
+    trialError: createMockElement(),
   };
 }
 
@@ -1012,7 +1023,40 @@ describe('popup', () => {
     });
   });
 
-  describe('showStatusMessage', () => {
+  describe('trial input elements', () => {
+    it('includes trialCount element in PopupElements', async () => {
+      // Import PopupElements type to verify the interface includes trialCount and trialError
+      // This test will fail at compile time if the interface doesn't have these properties
+      type TestPopupElements = import('../popup/index').PopupElements;
+
+      // Create an object that matches PopupElements
+      // TypeScript will error if trialCount/trialError aren't in the interface
+      const elements: TestPopupElements = {
+        idleState: {} as HTMLElement,
+        processingState: {} as HTMLElement,
+        completeState: {} as HTMLElement,
+        errorState: {} as HTMLElement,
+        startBtn: {} as HTMLButtonElement,
+        cancelBtn: {} as HTMLButtonElement,
+        doneBtn: {} as HTMLButtonElement,
+        retryBtn: {} as HTMLButtonElement,
+        resetBtn: {} as HTMLButtonElement,
+        bookmarkCount: {} as HTMLElement,
+        progressBar: {} as HTMLElement,
+        progressText: {} as HTMLElement,
+        currentUrl: {} as HTMLElement,
+        progressCount: {} as HTMLElement,
+        resultsList: {} as HTMLElement,
+        errorMessage: {} as HTMLElement,
+        trialCount: {} as HTMLInputElement,
+        trialError: {} as HTMLElement,
+      };
+      expect(elements.trialCount).toBeDefined();
+      expect(elements.trialError).toBeDefined();
+    });
+  });
+
+describe('showStatusMessage', () => {
     it('shows temporary status message that disappears after 3 seconds', async () => {
       vi.useFakeTimers();
 
@@ -1107,6 +1151,52 @@ describe('popup', () => {
 
       vi.useRealTimers();
       vi.unstubAllGlobals();
+    });
+  });
+
+  describe('validateTrialCount', () => {
+    it('accepts null (process all)', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(null, 100)).toEqual({ valid: true });
+    });
+
+    it('accepts valid count within range', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(50, 100)).toEqual({ valid: true });
+    });
+
+    it('accepts minimum (10)', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(10, 100)).toEqual({ valid: true });
+    });
+
+    it('accepts maximum (500)', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(500, 1000)).toEqual({ valid: true });
+    });
+
+    it('rejects count below minimum', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(5, 100)).toEqual({
+        valid: false,
+        error: 'Minimum 10 bookmarks'
+      });
+    });
+
+    it('rejects count above maximum', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(600, 1000)).toEqual({
+        valid: false,
+        error: 'Maximum 500 bookmarks'
+      });
+    });
+
+    it('rejects count > total', async () => {
+      const { validateTrialCount } = await import('../popup/index');
+      expect(validateTrialCount(150, 100)).toEqual({
+        valid: false,
+        error: 'Cannot exceed 100 bookmarks'
+      });
     });
   });
 });

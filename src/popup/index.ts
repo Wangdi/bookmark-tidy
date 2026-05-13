@@ -24,6 +24,8 @@ export interface PopupElements {
   progressCount: HTMLElement;
   resultsList: HTMLElement;
   errorMessage: HTMLElement;
+  trialCount: HTMLInputElement;
+  trialError: HTMLElement;
 }
 
 /**
@@ -48,6 +50,8 @@ export function getElements(): PopupElements {
       progressCount: document.getElementById('progress-count')!,
       resultsList: document.getElementById('results-list')!,
       errorMessage: document.getElementById('error-message')!,
+      trialCount: document.getElementById('trial-count')! as HTMLInputElement,
+      trialError: document.getElementById('trial-error')!,
     };
   }
   return elements;
@@ -142,6 +146,36 @@ export function showStatusMessage(message: string, durationMs: number) {
     els.bookmarkCount.textContent = '';
     statusMessageTimer = null;
   }, durationMs);
+}
+
+// Trial mode constants (local copies)
+const TRIAL_MIN_BOOKMARKS = 10;
+const TRIAL_MAX_BOOKMARKS = 500;
+
+/**
+ * Validate trial count input
+ */
+export function validateTrialCount(
+  count: number | null,
+  totalCount: number
+): { valid: boolean; error?: string } {
+  if (count === null) {
+    return { valid: true };
+  }
+
+  if (count < TRIAL_MIN_BOOKMARKS) {
+    return { valid: false, error: `Minimum ${TRIAL_MIN_BOOKMARKS} bookmarks` };
+  }
+
+  if (count > TRIAL_MAX_BOOKMARKS) {
+    return { valid: false, error: `Maximum ${TRIAL_MAX_BOOKMARKS} bookmarks` };
+  }
+
+  if (count > totalCount) {
+    return { valid: false, error: `Cannot exceed ${totalCount} bookmarks` };
+  }
+
+  return { valid: true };
 }
 
 /**
