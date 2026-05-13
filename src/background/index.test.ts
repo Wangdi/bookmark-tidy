@@ -981,3 +981,48 @@ describe('Category editor types', () => {
     expect(action.type).toBe('delete');
   });
 });
+
+describe('ProgressEvent category structure', () => {
+  it('includes categories in progress event', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'progress',
+      current: 50,
+      total: 100,
+      categories: [
+        { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2'] },
+        { id: 'cat-2', name: 'News', bookmarkIds: ['bm-3'] },
+      ],
+    };
+    expect(event.categories).toHaveLength(2);
+  });
+
+  it('categories field is optional for backward compatibility', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'progress',
+      current: 50,
+      total: 100,
+    };
+    expect(event.categories).toBeUndefined();
+  });
+
+  it('can include categories in complete event with stats', () => {
+    const event: import('../types').ProgressEvent = {
+      type: 'complete',
+      current: 100,
+      total: 100,
+      stats: {
+        processed: 100,
+        duplicatesMerged: 5,
+        deadlinks: 3,
+        unreachable: 2,
+        categories: 15,
+      },
+      categories: [
+        { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1', 'bm-2', 'bm-3'] },
+        { id: 'cat-2', name: 'News', bookmarkIds: ['bm-4'] },
+      ],
+    };
+    expect(event.categories).toHaveLength(2);
+    expect(event.stats?.categories).toBe(15);
+  });
+});

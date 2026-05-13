@@ -45,6 +45,7 @@ export interface ProgressEvent {
   isTrialMode?: boolean;  // Flag for trial mode
   trialInfo?: TrialInfo;  // Trial-specific information
   detailedMetrics?: DetailedMetrics;  // Detailed performance metrics
+  categories?: EditedCategory[];  // Category structure for editor
 }
 
 export interface OrganizerState {
