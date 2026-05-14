@@ -14,6 +14,7 @@ import {
   saveEditedCategories,
   getEditedCategories,
   clearEditedCategories,
+  estimateStorageSize,
 } from "../lib/storage";
 
 /**
@@ -47,6 +48,7 @@ export const state: OrganizerState = {
   total: 0,
   currentUrl: undefined,
   isTrialMode: false,
+  regenerateRequested: false,
 };
 
 /**
@@ -101,6 +103,7 @@ export function resetState(): void {
   state.total = 0;
   state.currentUrl = undefined;
   state.isTrialMode = false;
+  state.regenerateRequested = false;
 }
 
 /**
@@ -267,6 +270,10 @@ export async function sendNotification(payload: NotificationPayload): Promise<st
  * Get notification preferences from storage
  */
 export async function getNotificationPreferences(): Promise<NotificationOptions> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return { enabled: true };
+  }
   const result = await chrome.storage.sync.get('notificationOptions');
   return result.notificationOptions || { enabled: true };
 }
@@ -275,6 +282,10 @@ export async function getNotificationPreferences(): Promise<NotificationOptions>
  * Set notification preferences in storage
  */
 export async function setNotificationPreferences(options: NotificationOptions): Promise<void> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return;
+  }
   await chrome.storage.sync.set({ notificationOptions: options });
 }
 
@@ -331,6 +342,10 @@ export async function findFolderByTitle(title: string): Promise<OrganizedFolderI
  * Get user preferences from storage
  */
 export async function getUserPreferences(): Promise<UserPreferences> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return { autoNavigate: true };
+  }
   const result = await chrome.storage.sync.get('userPreferences');
   return result.userPreferences || { autoNavigate: true };
 }
@@ -339,6 +354,10 @@ export async function getUserPreferences(): Promise<UserPreferences> {
  * Set user preferences in storage
  */
 export async function setUserPreferences(preferences: UserPreferences): Promise<void> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return;
+  }
   await chrome.storage.sync.set({ userPreferences: preferences });
 }
 
@@ -618,17 +637,45 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
           lastUpdated: Date.now(),
         });
 
-        // Update progress - show actual URL being processed
-        const lastUrl = batch[batch.length - 1]?.url;
+        // Build live metrics
+        const diskUsage = await estimateStorageSize();
+        const memoryUsed = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize || 0;
+
+        // Update progress - show actual URLs being processed
+        const batchUrls = batch.map(b => b.url);
         state.current = fetchedIds.length;
         state.total = total;
-        state.currentUrl = lastUrl ?? `Fetched ${fetchedIds.length}/${total}`;
+        state.currentUrl = batchUrls[batchUrls.length - 1] ?? `Fetched ${fetchedIds.length}/${total}`;
 
         await sendProgress({
           type: "progress",
           current: fetchedIds.length,
           total,
-          currentUrl: lastUrl ?? `Fetched ${fetchedIds.length}/${total}`,
+          currentUrl: batchUrls[batchUrls.length - 1] ?? `Fetched ${fetchedIds.length}/${total}`,
+          detailedMetrics: {
+            fetch: {
+              totalUrls: total,
+              successful: fetchSuccessCount,
+              failed: fetchFailedCount,
+              timedOut: fetchTimedOutCount,
+              averageTime: fetchedIds.length > 0 ? Math.round(totalFetchTime / fetchedIds.length) : 0,
+              totalTime: totalFetchTime,
+              currentUrls: batchUrls,
+            },
+            storage: {
+              indexedDbWrites: fetchedIds.length,
+              indexedDbReads: 0,
+              checkpointSaves: Math.ceil(fetchedIds.length / FETCH_BATCH_SIZE),
+              estimatedSize: diskUsage,
+              diskUsage,
+            },
+            performance: {
+              totalElapsed: Date.now() - startTime,
+              averagePerBookmark: fetchedIds.length > 0 ? Math.round((Date.now() - startTime) / fetchedIds.length) : 0,
+              memoryEstimate: memoryUsed,
+              memoryUsed,
+            },
+          },
         });
       }
     }
@@ -671,70 +718,95 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
     });
     const dedupeResult = dedupeBookmarks(fetchedBookmarks);
 
-    // Categorize (use sparse vectors for large collections)
-    await sendProgress({
-      type: "progress",
-      current: 0,
-      total: 1,
-      currentUrl: "Categorizing...",
-    });
-    const categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
+    // ===== CATEGORIZATION + CATEGORY EDITOR LOOP =====
+    // This loop allows re-categorization when regenerate is requested
+    let categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
       ? categorizeBookmarksSparse(dedupeResult.bookmarks)
       : categorizeBookmarks(dedupeResult.bookmarks);
+    let finalBookmarks: CategorizedBookmark[] = categorizeResult.bookmarks;
+    let regenerateLoop = true;
 
-    // ===== CATEGORY EDITOR: Convert categories and send for editing =====
-    const originalCategories = convertToEditedCategories(categorizeResult.bookmarks);
+    while (regenerateLoop) {
+      regenerateLoop = false; // Will be set to true if regenerate requested
 
-    // Send categories to UI for editing
-    await sendProgress({
-      type: "progress",
-      current: 0,
-      total: 1,
-      currentUrl: "Categories generated - waiting for review",
-      categories: originalCategories,
-    });
+      // ===== CATEGORY EDITOR: Convert categories and send for editing =====
+      const originalCategories = convertToEditedCategories(categorizeResult.bookmarks);
 
-    // Clear any previous edited categories before waiting
-    await clearEditedCategories();
+      // Send categories to UI for editing
+      await sendProgress({
+        type: "progress",
+        current: 0,
+        total: 1,
+        currentUrl: "Categories generated - waiting for review",
+        categories: originalCategories,
+      });
 
-    // Wait for user edits with timeout (5 minutes)
-    const CATEGORY_EDIT_TIMEOUT = config.categoryEditTimeoutMs;
-    const CATEGORY_EDIT_POLL_INTERVAL = config.categoryEditPollIntervalMs;
-    const editStartTime = Date.now();
-    let editedCategories: EditedCategory[] = [];
-    let hasUserEdits = false;
+      // Clear any previous edited categories before waiting
+      await clearEditedCategories();
 
-    while (!hasUserEdits && Date.now() - editStartTime < CATEGORY_EDIT_TIMEOUT) {
-      if (state.shouldAbort) {
-        await sendProgress({
-          type: "error",
-          current: 0,
-          total: 0,
-          error: "Operation cancelled",
-        });
-        return true;
+      // Wait for user edits with timeout (5 minutes)
+      const CATEGORY_EDIT_TIMEOUT = config.categoryEditTimeoutMs;
+      const CATEGORY_EDIT_POLL_INTERVAL = config.categoryEditPollIntervalMs;
+      const editStartTime = Date.now();
+      let editedCategories: EditedCategory[] = [];
+      let hasUserEdits = false;
+
+      while (!hasUserEdits && Date.now() - editStartTime < CATEGORY_EDIT_TIMEOUT) {
+        if (state.shouldAbort) {
+          await sendProgress({
+            type: "error",
+            current: 0,
+            total: 0,
+            error: "Operation cancelled",
+          });
+          return true;
+        }
+
+        // Check for regenerate request
+        if (state.regenerateRequested) {
+          state.regenerateRequested = false;
+          // Re-categorize and loop again
+          await sendProgress({
+            type: "progress",
+            current: 0,
+            total: 1,
+            currentUrl: "Re-categorizing...",
+          });
+          categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
+            ? categorizeBookmarksSparse(dedupeResult.bookmarks)
+            : categorizeBookmarks(dedupeResult.bookmarks);
+          regenerateLoop = true;
+          break;
+        }
+
+        editedCategories = await getEditedCategories();
+        if (editedCategories.length > 0) {
+          hasUserEdits = true;
+          break;
+        }
+
+        // Wait before checking again
+        await new Promise(resolve => setTimeout(resolve, CATEGORY_EDIT_POLL_INTERVAL));
       }
 
-      editedCategories = await getEditedCategories();
-      if (editedCategories.length > 0) {
-        hasUserEdits = true;
-        break;
+      // If regenerate was requested, continue the outer loop
+      if (regenerateLoop) {
+        continue;
       }
 
-      // Wait before checking again
-      await new Promise(resolve => setTimeout(resolve, CATEGORY_EDIT_POLL_INTERVAL));
-    }
+      // Use edited categories if available, otherwise use original
+      if (hasUserEdits && editedCategories.length > 0) {
+        finalBookmarks = convertFromEditedCategories(editedCategories, categorizeResult.bookmarks);
+      } else {
+        finalBookmarks = categorizeResult.bookmarks;
+      }
 
-    // Use edited categories if available, otherwise use original
-    let finalBookmarks: CategorizedBookmark[];
-    if (hasUserEdits && editedCategories.length > 0) {
-      finalBookmarks = convertFromEditedCategories(editedCategories, categorizeResult.bookmarks);
-    } else {
-      finalBookmarks = categorizeResult.bookmarks;
-    }
+      // Clear edited categories for next run
+      await clearEditedCategories();
 
-    // Clear edited categories for next run
-    await clearEditedCategories();
+      // Exit the loop - we have final bookmarks
+      break;
+    }
 
     // Update checkpoint to organizing phase
     await saveCheckpoint({
@@ -843,6 +915,7 @@ export async function runOrganization(options?: OrganizationOptions): Promise<bo
     state.isRunning = false;
     state.shouldAbort = false;
     state.isTrialMode = false;
+    state.regenerateRequested = false;
   }
 
   return true;
@@ -927,7 +1000,8 @@ export function handleMessage(
     });
     return true;
   } else if (message.type === "REGENERATE_CATEGORIES") {
-    state.shouldAbort = true;
+    // Set regenerate flag instead of abort - this triggers re-categorization
+    state.regenerateRequested = true;
     clearEditedCategories().then(() => {
       sendResponse({ success: true });
     });

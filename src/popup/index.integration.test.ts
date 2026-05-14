@@ -210,11 +210,12 @@ describe('popup integration', () => {
   });
 
   describe('handleRetry', () => {
-    it('starts organization', async () => {
+    it('returns to idle state', async () => {
       await handleRetry();
 
-      expect(mockElements.processingState.classList.remove).toHaveBeenCalledWith('hidden');
-      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'START_ORGANIZE' });
+      // handleRetry now returns to idle state instead of restarting
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
+      expect(mockElements.bookmarkCount.textContent).toBe('2 bookmarks found');
     });
   });
 

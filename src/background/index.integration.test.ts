@@ -78,6 +78,7 @@ vi.mock('../lib/storage', () => ({
   clearEditedCategories: vi.fn(async () => {
     mockEditedCategories.length = 0;
   }),
+  estimateStorageSize: vi.fn(async () => 1024),
 }));
 
 // Mock modules
@@ -774,7 +775,7 @@ describe('background integration tests', () => {
 
       // Reset state
       resetState();
-      state.shouldAbort = false;
+      state.regenerateRequested = false;
 
       handleMessage(
         { type: 'REGENERATE_CATEGORIES' },
@@ -784,7 +785,7 @@ describe('background integration tests', () => {
 
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      expect(state.shouldAbort).toBe(true);
+      expect(state.regenerateRequested).toBe(true);
       expect(sendResponse).toHaveBeenCalledWith({ success: true });
     });
   });

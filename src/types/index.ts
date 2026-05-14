@@ -56,6 +56,7 @@ export interface OrganizerState {
   total: number;
   currentUrl?: string;
   isTrialMode?: boolean;  // Flag for trial mode
+  regenerateRequested?: boolean;  // Flag for regenerate request
 }
 
 export interface ClusterResult {
@@ -102,6 +103,7 @@ export interface FetchMetrics {
   timedOut: number;
   averageTime: number;  // ms per URL
   totalTime: number;    // total fetch time in ms
+  currentUrls?: string[];  // URLs currently being fetched
 }
 
 export interface StorageMetrics {
@@ -109,6 +111,7 @@ export interface StorageMetrics {
   indexedDbReads: number;
   checkpointSaves: number;
   estimatedSize: number;  // bytes
+  diskUsage?: number;  // IndexedDB size in bytes
 }
 
 export interface CategorizationMetrics {
@@ -117,6 +120,7 @@ export interface CategorizationMetrics {
   clusters: number;
   iterations: number;
   convergenceTime: number;  // ms
+  categoryPreview?: { name: string; count: number }[];  // live category counts
 }
 
 export interface OrganizationMetrics {
@@ -130,6 +134,7 @@ export interface PerformanceMetrics {
   totalElapsed: number;  // ms
   averagePerBookmark: number;  // ms per bookmark
   memoryEstimate: number;  // bytes
+  memoryUsed?: number;  // current memory usage in bytes (Chrome only)
 }
 
 export interface DetailedMetrics {

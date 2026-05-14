@@ -35,8 +35,10 @@ export interface PopupElements {
   autoNavigateToggle: HTMLInputElement;
   detailsToggle: HTMLButtonElement;
   detailsPanel: HTMLElement;
+  fetchUrls: HTMLElement;
   fetchMetrics: HTMLElement;
   storageMetrics: HTMLElement;
+  categoryPreview: HTMLElement;
   categorizationMetrics: HTMLElement;
   organizationMetrics: HTMLElement;
   performanceMetrics: HTMLElement;
@@ -74,8 +76,10 @@ export function getElements(): PopupElements {
       autoNavigateToggle: document.getElementById('auto-navigate-toggle')! as HTMLInputElement,
       detailsToggle: document.getElementById('details-toggle')! as HTMLButtonElement,
       detailsPanel: document.getElementById('details-panel')!,
+      fetchUrls: document.getElementById('fetch-urls')!,
       fetchMetrics: document.getElementById('fetch-metrics')!,
       storageMetrics: document.getElementById('storage-metrics')!,
+      categoryPreview: document.getElementById('category-preview')!,
       categorizationMetrics: document.getElementById('categorization-metrics')!,
       organizationMetrics: document.getElementById('organization-metrics')!,
       performanceMetrics: document.getElementById('performance-metrics')!,
@@ -119,6 +123,11 @@ export function showState(state: 'idle' | 'processing' | 'complete' | 'error' | 
   els.completeState.classList.add('hidden');
   els.errorState.classList.add('hidden');
   els.editorState.classList.add('hidden');
+
+  // Clear categories when returning to idle or error state
+  if (state === 'idle' || state === 'error') {
+    currentCategories = [];
+  }
 
   switch (state) {
     case 'idle':
@@ -202,6 +211,14 @@ export function showStatusMessage(message: string, durationMs: number) {
  */
 export async function loadNotificationPreference(): Promise<void> {
   const els = getElements();
+
+  // Check if chrome.storage is available (extension context may be invalidated)
+  if (!chrome?.storage?.sync) {
+    // Default to enabled if storage not available
+    els.notificationToggle.checked = true;
+    return;
+  }
+
   const result = await chrome.storage.sync.get('notificationOptions');
   const options = result.notificationOptions || { enabled: true };
   els.notificationToggle.checked = options.enabled !== false;
@@ -213,6 +230,15 @@ export async function loadNotificationPreference(): Promise<void> {
 export async function handleNotificationToggle(): Promise<void> {
   const els = getElements();
   const enabled = els.notificationToggle.checked;
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    showStatusMessage(
+      enabled ? '✓ Notifications enabled (session only)' : '✗ Notifications disabled (session only)',
+      2000
+    );
+    return;
+  }
 
   await chrome.storage.sync.set({
     notificationOptions: { enabled }
@@ -230,6 +256,14 @@ export async function handleNotificationToggle(): Promise<void> {
  */
 export async function loadAutoNavigatePreference(): Promise<void> {
   const els = getElements();
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    // Default to enabled if storage not available
+    els.autoNavigateToggle.checked = true;
+    return;
+  }
+
   const result = await chrome.storage.sync.get('userPreferences');
   const prefs = result.userPreferences || { autoNavigate: true };
   els.autoNavigateToggle.checked = prefs.autoNavigate !== false;
@@ -241,6 +275,15 @@ export async function loadAutoNavigatePreference(): Promise<void> {
 export async function handleAutoNavigateToggle(): Promise<void> {
   const els = getElements();
   const autoNavigate = els.autoNavigateToggle.checked;
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    showStatusMessage(
+      autoNavigate ? '✓ Auto-navigate enabled (session only)' : '✗ Auto-navigate disabled (session only)',
+      2000
+    );
+    return;
+  }
 
   await chrome.storage.sync.set({
     userPreferences: { autoNavigate }
@@ -281,15 +324,35 @@ export function updateDetailedMetrics(metrics: import('../types').DetailedMetric
   const els = getElements();
 
   if (metrics.fetch) {
+    // Display current URLs being fetched
+    if (metrics.fetch.currentUrls && metrics.fetch.currentUrls.length > 0) {
+      els.fetchUrls.innerHTML = metrics.fetch.currentUrls
+        .map(url => `<div class="url-item">${url}</div>`)
+        .join('');
+    } else {
+      els.fetchUrls.textContent = '-';
+    }
+
     els.fetchMetrics.textContent =
       `URLs: ${metrics.fetch.totalUrls} ✓${metrics.fetch.successful} ✗${metrics.fetch.failed} ⏱${metrics.fetch.timedOut}\n` +
       `Avg: ${metrics.fetch.averageTime}ms | Total: ${(metrics.fetch.totalTime / 1000).toFixed(1)}s`;
   }
 
   if (metrics.storage) {
+    const diskUsage = metrics.storage.diskUsage || metrics.storage.estimatedSize;
     els.storageMetrics.textContent =
       `Writes: ${metrics.storage.indexedDbWrites} | Reads: ${metrics.storage.indexedDbReads}\n` +
-      `Checkpoints: ${metrics.storage.checkpointSaves} | Size: ${(metrics.storage.estimatedSize / 1024).toFixed(1)}KB`;
+      `Checkpoints: ${metrics.storage.checkpointSaves} | Size: ${(diskUsage / 1024).toFixed(1)}KB`;
+  }
+
+  // Display live category preview
+  if (metrics.categorization?.categoryPreview && metrics.categorization.categoryPreview.length > 0) {
+    els.categoryPreview.innerHTML = metrics.categorization.categoryPreview
+      .map(cat => `<div class="category-preview-item">
+        <span class="category-preview-name">${cat.name}</span>
+        <span class="category-preview-count">${cat.count}</span>
+      </div>`)
+      .join('');
   }
 
   if (metrics.categorization) {
@@ -306,9 +369,10 @@ export function updateDetailedMetrics(metrics: import('../types').DetailedMetric
   }
 
   if (metrics.performance) {
+    const memUsed = metrics.performance.memoryUsed || metrics.performance.memoryEstimate;
     els.performanceMetrics.textContent =
       `Elapsed: ${(metrics.performance.totalElapsed / 1000).toFixed(1)}s\n` +
-      `Avg: ${metrics.performance.averagePerBookmark}ms/bm | Mem: ${(metrics.performance.memoryEstimate / 1024 / 1024).toFixed(1)}MB`;
+      `Avg: ${metrics.performance.averagePerBookmark}ms/bm | Mem: ${(memUsed / 1024 / 1024).toFixed(1)}MB`;
   }
 }
 
@@ -421,6 +485,9 @@ export async function init() {
 export async function startOrganization() {
   const els = getElements();
 
+  // Clear any previous categories state
+  currentCategories = [];
+
   // Get and validate trial count
   const totalCount = await getBookmarkCount();
   const trialCount = getTrialCount();
@@ -468,10 +535,15 @@ export function handleDone() {
 }
 
 /**
- * Handle retry button
+ * Handle retry button - return to idle state instead of restarting
  */
 export async function handleRetry() {
-  await startOrganization();
+  // Clear categories state
+  currentCategories = [];
+  // Return to idle state
+  showState('idle');
+  const count = await getBookmarkCount();
+  getElements().bookmarkCount.textContent = `${count} bookmarks found`;
 }
 
 /**

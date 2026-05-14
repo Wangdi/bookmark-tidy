@@ -183,7 +183,7 @@ h1 {
 }
 
 .trial-input {
-  width: 80px;
+  width: 120px;
   padding: 8px 12px;
   border: 1px solid var(--border-color, #ddd);
   border-radius: 4px;
@@ -322,6 +322,56 @@ h1 {
   font-family: monospace;
   color: var(--text-primary, #333);
   line-height: 1.6;
+}
+
+/* URL list for live fetch display */
+.url-list {
+  font-size: 11px;
+  font-family: monospace;
+  color: var(--text-primary, #333);
+  max-height: 80px;
+  overflow-y: auto;
+  word-break: break-all;
+  line-height: 1.4;
+}
+
+.url-list .url-item {
+  padding: 2px 0;
+  border-bottom: 1px dashed var(--border-color, #ddd);
+}
+
+.url-list .url-item:last-child {
+  border-bottom: none;
+}
+
+/* Category preview for live categorization display */
+.category-preview {
+  font-size: 12px;
+  max-height: 100px;
+  overflow-y: auto;
+}
+
+.category-preview-item {
+  display: flex;
+  justify-content: space-between;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border-color, #eee);
+}
+
+.category-preview-item:last-child {
+  border-bottom: none;
+}
+
+.category-preview-name {
+  color: var(--text-primary, #333);
+}
+
+.category-preview-count {
+  color: var(--text-secondary, #666);
+  background: var(--bg-primary, #fff);
+  padding: 0 6px;
+  border-radius: 10px;
+  font-size: 11px;
 }
 
 /* Category Editor Styles */

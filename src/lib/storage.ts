@@ -234,3 +234,56 @@ export async function clearEditedCategories(): Promise<void> {
 export async function clearAll(): Promise<void> {
   await Promise.all([clearFetched(), clearCheckpoint(), clearEditedCategories()]);
 }
+
+/**
+ * Estimate IndexedDB storage size
+ * Uses navigator.storage.estimate() if available, otherwise calculates from data
+ */
+export async function estimateStorageSize(): Promise<number> {
+  // Try to use Storage API (available in modern browsers)
+  if (navigator.storage && navigator.storage.estimate) {
+    try {
+      const estimate = await navigator.storage.estimate();
+      return estimate.usage || 0;
+    } catch {
+      // Fall through to manual calculation
+    }
+  }
+
+  // Manual estimation: count records and estimate average size
+  const db = await openDB();
+
+  return new Promise((resolve, reject) => {
+    let totalSize = 0;
+    let pending = 0;
+
+    const stores = [FETCHED_STORE, CHECKPOINT_STORE, EDITED_CATEGORIES_STORE];
+
+    stores.forEach(storeName => {
+      if (db.objectStoreNames.contains(storeName)) {
+        pending++;
+        const tx = db.transaction(storeName, 'readonly');
+        const store = tx.objectStore(storeName);
+        const request = store.getAll();
+
+        request.onsuccess = () => {
+          const items = request.result;
+          // Rough estimate: each item is about 500-2000 bytes
+          // Use JSON.stringify for more accurate estimate
+          for (const item of items) {
+            totalSize += JSON.stringify(item).length * 2; // UTF-16 chars
+          }
+          pending--;
+          if (pending === 0) resolve(totalSize);
+        };
+
+        request.onerror = () => {
+          pending--;
+          if (pending === 0) resolve(totalSize);
+        };
+      }
+    });
+
+    if (pending === 0) resolve(0);
+  });
+}

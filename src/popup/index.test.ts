@@ -90,8 +90,10 @@ function createMockElements(): PopupElements {
     autoNavigateToggle: createMockInput(),
     detailsToggle: createMockButton(),
     detailsPanel: createMockElement(),
+    fetchUrls: createMockElement(),
     fetchMetrics: createMockElement(),
     storageMetrics: createMockElement(),
+    categoryPreview: createMockElement(),
     categorizationMetrics: createMockElement(),
     organizationMetrics: createMockElement(),
     performanceMetrics: createMockElement(),
@@ -665,7 +667,9 @@ describe('popup', () => {
 
       await handleRetry();
 
-      expect(mockSendMessage).toHaveBeenCalledWith({ type: 'START_ORGANIZE' });
+      // handleRetry now returns to idle state instead of restarting
+      // It should show idle state (remove hidden from idle, add hidden to others)
+      expect(mockElements.idleState.classList.remove).toHaveBeenCalledWith('hidden');
 
       vi.unstubAllGlobals();
     });
@@ -1229,8 +1233,10 @@ describe('popup', () => {
         autoNavigateToggle: {} as HTMLInputElement,
         detailsToggle: {} as HTMLButtonElement,
         detailsPanel: {} as HTMLElement,
+        fetchUrls: {} as HTMLElement,
         fetchMetrics: {} as HTMLElement,
         storageMetrics: {} as HTMLElement,
+        categoryPreview: {} as HTMLElement,
         categorizationMetrics: {} as HTMLElement,
         organizationMetrics: {} as HTMLElement,
         performanceMetrics: {} as HTMLElement,
