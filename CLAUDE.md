@@ -64,6 +64,11 @@ Two-phase pipeline for handling 2000+ bookmarks:
 | Category naming | 1-2 words from top TF-IDF terms |
 | Sub-categories | Auto-generated when category >10 bookmarks |
 | Crash recovery | IndexedDB checkpointing, resume on restart |
+| **Trial mode** | Process random subset (10-500) of bookmarks for testing, results saved to timestamped folder |
+| **Background notifications** | Chrome notifications when job completes (popup not focused) |
+| **Auto-navigate** | Automatically open Chrome Bookmarks Manager to organized folder on completion |
+| **Detailed progress** | Expandable metrics panel showing fetch/storage/categorization/organization stats |
+| **Category editor** | Preview and edit categories before organizing |
 
 ## Key Design Decisions
 

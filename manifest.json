@@ -3,7 +3,7 @@
   "name": "Bookmark Tidy",
   "version": "1.0.0",
   "description": "Organize and tidy up your Chrome bookmarks",
-  "permissions": ["bookmarks"],
+  "permissions": ["bookmarks", "notifications"],
   "host_permissions": ["<all_urls>"],
   "background": {
     "service_worker": "background/index.js",

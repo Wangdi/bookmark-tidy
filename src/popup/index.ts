@@ -1,11 +1,16 @@
 // src/popup/index.ts
 
-import { ProgressEvent } from '../types';
+import { ProgressEvent, EditedCategory } from '../types';
 
 /**
  * DOM element cache - populated on first access
  */
 let elements: PopupElements | null = null;
+
+/**
+ * Current categories state for editor
+ */
+let currentCategories: EditedCategory[] = [];
 
 export interface PopupElements {
   idleState: HTMLElement;
@@ -24,6 +29,23 @@ export interface PopupElements {
   progressCount: HTMLElement;
   resultsList: HTMLElement;
   errorMessage: HTMLElement;
+  trialCount: HTMLInputElement;
+  trialError: HTMLElement;
+  notificationToggle: HTMLInputElement;
+  autoNavigateToggle: HTMLInputElement;
+  detailsToggle: HTMLButtonElement;
+  detailsPanel: HTMLElement;
+  fetchUrls: HTMLElement;
+  fetchMetrics: HTMLElement;
+  storageMetrics: HTMLElement;
+  categoryPreview: HTMLElement;
+  categorizationMetrics: HTMLElement;
+  organizationMetrics: HTMLElement;
+  performanceMetrics: HTMLElement;
+  editorState: HTMLElement;
+  categoryTree: HTMLElement;
+  regenerateBtn: HTMLButtonElement;
+  applyBtn: HTMLButtonElement;
 }
 
 /**
@@ -48,6 +70,23 @@ export function getElements(): PopupElements {
       progressCount: document.getElementById('progress-count')!,
       resultsList: document.getElementById('results-list')!,
       errorMessage: document.getElementById('error-message')!,
+      trialCount: document.getElementById('trial-count')! as HTMLInputElement,
+      trialError: document.getElementById('trial-error')!,
+      notificationToggle: document.getElementById('notification-toggle')! as HTMLInputElement,
+      autoNavigateToggle: document.getElementById('auto-navigate-toggle')! as HTMLInputElement,
+      detailsToggle: document.getElementById('details-toggle')! as HTMLButtonElement,
+      detailsPanel: document.getElementById('details-panel')!,
+      fetchUrls: document.getElementById('fetch-urls')!,
+      fetchMetrics: document.getElementById('fetch-metrics')!,
+      storageMetrics: document.getElementById('storage-metrics')!,
+      categoryPreview: document.getElementById('category-preview')!,
+      categorizationMetrics: document.getElementById('categorization-metrics')!,
+      organizationMetrics: document.getElementById('organization-metrics')!,
+      performanceMetrics: document.getElementById('performance-metrics')!,
+      editorState: document.getElementById('editor-state')!,
+      categoryTree: document.getElementById('category-tree')!,
+      regenerateBtn: document.getElementById('regenerate-btn')! as HTMLButtonElement,
+      applyBtn: document.getElementById('apply-btn')! as HTMLButtonElement,
     };
   }
   return elements;
@@ -61,14 +100,34 @@ export function setElements(mockElements: PopupElements | null) {
 }
 
 /**
+ * Set categories (for testing and state management)
+ */
+export function setCategories(categories: EditedCategory[]) {
+  currentCategories = categories;
+}
+
+/**
+ * Get current categories
+ */
+export function getCategories(): EditedCategory[] {
+  return currentCategories;
+}
+
+/**
  * Show a specific state
  */
-export function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
+export function showState(state: 'idle' | 'processing' | 'complete' | 'error' | 'editor') {
   const els = getElements();
   els.idleState.classList.add('hidden');
   els.processingState.classList.add('hidden');
   els.completeState.classList.add('hidden');
   els.errorState.classList.add('hidden');
+  els.editorState.classList.add('hidden');
+
+  // Clear categories when returning to idle or error state
+  if (state === 'idle' || state === 'error') {
+    currentCategories = [];
+  }
 
   switch (state) {
     case 'idle':
@@ -82,6 +141,9 @@ export function showState(state: 'idle' | 'processing' | 'complete' | 'error') {
       break;
     case 'error':
       els.errorState.classList.remove('hidden');
+      break;
+    case 'editor':
+      els.editorState.classList.remove('hidden');
       break;
   }
 }
@@ -145,6 +207,221 @@ export function showStatusMessage(message: string, durationMs: number) {
 }
 
 /**
+ * Load notification preference from storage
+ */
+export async function loadNotificationPreference(): Promise<void> {
+  const els = getElements();
+
+  // Check if chrome.storage is available (extension context may be invalidated)
+  if (!chrome?.storage?.sync) {
+    // Default to enabled if storage not available
+    els.notificationToggle.checked = true;
+    return;
+  }
+
+  const result = await chrome.storage.sync.get('notificationOptions');
+  const options = result.notificationOptions || { enabled: true };
+  els.notificationToggle.checked = options.enabled !== false;
+}
+
+/**
+ * Handle notification toggle change
+ */
+export async function handleNotificationToggle(): Promise<void> {
+  const els = getElements();
+  const enabled = els.notificationToggle.checked;
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    showStatusMessage(
+      enabled ? '✓ Notifications enabled (session only)' : '✗ Notifications disabled (session only)',
+      2000
+    );
+    return;
+  }
+
+  await chrome.storage.sync.set({
+    notificationOptions: { enabled }
+  });
+
+  // Show feedback
+  showStatusMessage(
+    enabled ? '✓ Notifications enabled' : '✗ Notifications disabled',
+    2000
+  );
+}
+
+/**
+ * Load auto-navigate preference from storage
+ */
+export async function loadAutoNavigatePreference(): Promise<void> {
+  const els = getElements();
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    // Default to enabled if storage not available
+    els.autoNavigateToggle.checked = true;
+    return;
+  }
+
+  const result = await chrome.storage.sync.get('userPreferences');
+  const prefs = result.userPreferences || { autoNavigate: true };
+  els.autoNavigateToggle.checked = prefs.autoNavigate !== false;
+}
+
+/**
+ * Handle auto-navigate toggle change
+ */
+export async function handleAutoNavigateToggle(): Promise<void> {
+  const els = getElements();
+  const autoNavigate = els.autoNavigateToggle.checked;
+
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    showStatusMessage(
+      autoNavigate ? '✓ Auto-navigate enabled (session only)' : '✗ Auto-navigate disabled (session only)',
+      2000
+    );
+    return;
+  }
+
+  await chrome.storage.sync.set({
+    userPreferences: { autoNavigate }
+  });
+
+  // Show feedback
+  showStatusMessage(
+    autoNavigate ? '✓ Auto-navigate enabled' : '✗ Auto-navigate disabled',
+    2000
+  );
+}
+
+/**
+ * Details panel expansion state
+ */
+let detailsExpanded = false;
+
+/**
+ * Toggle details panel visibility
+ */
+export function toggleDetails(): void {
+  const els = getElements();
+  detailsExpanded = !detailsExpanded;
+
+  if (detailsExpanded) {
+    els.detailsPanel.classList.remove('hidden');
+    els.detailsToggle.textContent = 'Hide Details';
+  } else {
+    els.detailsPanel.classList.add('hidden');
+    els.detailsToggle.textContent = 'Show Details';
+  }
+}
+
+/**
+ * Update detailed metrics display
+ */
+export function updateDetailedMetrics(metrics: import('../types').DetailedMetrics): void {
+  const els = getElements();
+
+  if (metrics.fetch) {
+    // Display current URLs being fetched
+    if (metrics.fetch.currentUrls && metrics.fetch.currentUrls.length > 0) {
+      els.fetchUrls.innerHTML = metrics.fetch.currentUrls
+        .map(url => `<div class="url-item">${url}</div>`)
+        .join('');
+    } else {
+      els.fetchUrls.textContent = '-';
+    }
+
+    els.fetchMetrics.textContent =
+      `URLs: ${metrics.fetch.totalUrls} ✓${metrics.fetch.successful} ✗${metrics.fetch.failed} ⏱${metrics.fetch.timedOut}\n` +
+      `Avg: ${metrics.fetch.averageTime}ms | Total: ${(metrics.fetch.totalTime / 1000).toFixed(1)}s`;
+  }
+
+  if (metrics.storage) {
+    const diskUsage = metrics.storage.diskUsage || metrics.storage.estimatedSize;
+    els.storageMetrics.textContent =
+      `Writes: ${metrics.storage.indexedDbWrites} | Reads: ${metrics.storage.indexedDbReads}\n` +
+      `Checkpoints: ${metrics.storage.checkpointSaves} | Size: ${(diskUsage / 1024).toFixed(1)}KB`;
+  }
+
+  // Display live category preview
+  if (metrics.categorization?.categoryPreview && metrics.categorization.categoryPreview.length > 0) {
+    els.categoryPreview.innerHTML = metrics.categorization.categoryPreview
+      .map(cat => `<div class="category-preview-item">
+        <span class="category-preview-name">${cat.name}</span>
+        <span class="category-preview-count">${cat.count}</span>
+      </div>`)
+      .join('');
+  }
+
+  if (metrics.categorization) {
+    els.categorizationMetrics.textContent =
+      `Vocab: ${metrics.categorization.vocabularySize} | Dims: ${metrics.categorization.vectorDimensions}\n` +
+      `Clusters: ${metrics.categorization.clusters} | Iters: ${metrics.categorization.iterations}\n` +
+      `Time: ${metrics.categorization.convergenceTime}ms`;
+  }
+
+  if (metrics.organization) {
+    els.organizationMetrics.textContent =
+      `Folders: ${metrics.organization.foldersCreated} | Bookmarks: ${metrics.organization.bookmarksCreated}\n` +
+      `Batches: ${metrics.organization.batches} | Avg: ${metrics.organization.averageBatchTime}ms`;
+  }
+
+  if (metrics.performance) {
+    const memUsed = metrics.performance.memoryUsed || metrics.performance.memoryEstimate;
+    els.performanceMetrics.textContent =
+      `Elapsed: ${(metrics.performance.totalElapsed / 1000).toFixed(1)}s\n` +
+      `Avg: ${metrics.performance.averagePerBookmark}ms/bm | Mem: ${(memUsed / 1024 / 1024).toFixed(1)}MB`;
+  }
+}
+
+// Trial mode constants (local copies)
+const TRIAL_MIN_BOOKMARKS = 10;
+const TRIAL_MAX_BOOKMARKS = 500;
+
+/**
+ * Validate trial count input
+ */
+export function validateTrialCount(
+  count: number | null,
+  totalCount: number
+): { valid: boolean; error?: string } {
+  if (count === null) {
+    return { valid: true };
+  }
+
+  if (count < TRIAL_MIN_BOOKMARKS) {
+    return { valid: false, error: `Minimum ${TRIAL_MIN_BOOKMARKS} bookmarks` };
+  }
+
+  if (count > TRIAL_MAX_BOOKMARKS) {
+    return { valid: false, error: `Maximum ${TRIAL_MAX_BOOKMARKS} bookmarks` };
+  }
+
+  if (count > totalCount) {
+    return { valid: false, error: `Cannot exceed ${totalCount} bookmarks` };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Get trial count from input
+ */
+export function getTrialCount(): number | null {
+  const els = getElements();
+  const value = els.trialCount.value.trim();
+
+  if (!value) {
+    return null;  // Empty = process all
+  }
+
+  const count = parseInt(value, 10);
+  return isNaN(count) ? null : count;
+}
+
+/**
  * Count bookmarks in tree (pure function for testability)
  */
 export function countBookmarksInTree(tree: chrome.bookmarks.BookmarkTreeNode[]): number {
@@ -178,6 +455,11 @@ export async function getBookmarkCount(): Promise<number> {
  * Initialize popup
  */
 export async function init() {
+  // Load notification preference
+  await loadNotificationPreference();
+  // Load auto-navigate preference
+  await loadAutoNavigatePreference();
+
   // Get current state
   const state = await chrome.runtime.sendMessage({ type: 'GET_STATE' });
 
@@ -201,16 +483,36 @@ export async function init() {
  * Start organization
  */
 export async function startOrganization() {
+  const els = getElements();
+
+  // Clear any previous categories state
+  currentCategories = [];
+
+  // Get and validate trial count
+  const totalCount = await getBookmarkCount();
+  const trialCount = getTrialCount();
+  const validation = validateTrialCount(trialCount, totalCount);
+
+  if (!validation.valid) {
+    // Show error message
+    showStatusMessage(`❌ ${validation.error}`, 3000);
+    return;
+  }
+
   showState('processing');
   updateProgress(0, 0, 'Starting...');
 
-  const response = await chrome.runtime.sendMessage({ type: 'START_ORGANIZE' });
+  const message = trialCount !== null
+    ? { type: 'START_ORGANIZE', maxBookmarks: trialCount }
+    : { type: 'START_ORGANIZE' };
+
+  const response = await chrome.runtime.sendMessage(message);
 
   // If operation didn't start (already running), show idle state
   if (response && response.started === false) {
     showState('idle');
     const count = await getBookmarkCount();
-    getElements().bookmarkCount.textContent = `${count} bookmarks found`;
+    els.bookmarkCount.textContent = `${count} bookmarks found`;
   }
 }
 
@@ -233,10 +535,15 @@ export function handleDone() {
 }
 
 /**
- * Handle retry button
+ * Handle retry button - return to idle state instead of restarting
  */
 export async function handleRetry() {
-  await startOrganization();
+  // Clear categories state
+  currentCategories = [];
+  // Return to idle state
+  showState('idle');
+  const count = await getBookmarkCount();
+  getElements().bookmarkCount.textContent = `${count} bookmarks found`;
 }
 
 /**
@@ -287,11 +594,46 @@ export async function handleReset() {
  */
 export function handleProgressMessage(message: ProgressEvent): boolean {
   if (message.type === 'progress') {
+    // Check if categories are available (show editor)
+    if (message.categories && message.categories.length > 0) {
+      showState('editor');
+      setCategories(message.categories);
+      renderCategoryTree(message.categories);
+      return true;
+    }
+
+    // Normal progress update
     updateProgress(message.current, message.total, message.currentUrl);
+
+    // Update UI for trial mode
+    if (message.isTrialMode && message.trialInfo) {
+      const els = getElements();
+      els.progressCount.textContent = `Trial: ${message.current} of ${message.total} (of ${message.trialInfo.totalCount} total)`;
+    }
+
+    // Update detailed metrics if provided
+    if (message.detailedMetrics) {
+      updateDetailedMetrics(message.detailedMetrics);
+    }
+
     return true;
   } else if (message.type === 'complete') {
     showResults(message.stats);
     showState('complete');
+
+    // Update completion message for trial mode
+    if (message.isTrialMode && message.trialInfo) {
+      const folderHint = document.querySelector('.folder-hint');
+      if (folderHint) {
+        folderHint.textContent = `Check ${message.trialInfo.folderName}`;
+      }
+    }
+
+    // Update final detailed metrics if provided
+    if (message.detailedMetrics) {
+      updateDetailedMetrics(message.detailedMetrics);
+    }
+
     return true;
   } else if (message.type === 'error') {
     // Don't show error state for user-initiated cancellation
@@ -307,6 +649,134 @@ export function handleProgressMessage(message: ProgressEvent): boolean {
 }
 
 /**
+ * Handle rename category
+ */
+export function handleRenameCategory(categoryId: string): void {
+  const category = currentCategories.find(c => c.id === categoryId);
+  if (!category) return;
+
+  const newName = prompt('Enter new category name:', category.name);
+  if (!newName || newName.trim() === '') return;
+
+  currentCategories = currentCategories.map(c =>
+    c.id === categoryId ? { ...c, name: newName.trim() } : c
+  );
+
+  renderCategoryTree(currentCategories);
+}
+
+/**
+ * Handle merge category
+ */
+export function handleMergeCategory(sourceId: string): void {
+  const source = currentCategories.find(c => c.id === sourceId);
+  if (!source) return;
+
+  // Get target category (exclude source)
+  const targets = currentCategories.filter(c => c.id !== sourceId);
+  if (targets.length === 0) {
+    alert('No other categories to merge with');
+    return;
+  }
+
+  const targetNames = targets.map(t => t.name).join(', ');
+  const targetName = prompt(`Merge "${source.name}" into which category?\n\nAvailable: ${targetNames}`);
+  if (!targetName) return;
+
+  const target = targets.find(t => t.name.toLowerCase() === targetName.toLowerCase());
+  if (!target) {
+    alert('Category not found');
+    return;
+  }
+
+  // Merge
+  currentCategories = currentCategories
+    .filter(c => c.id !== sourceId)
+    .map(c =>
+      c.id === target.id
+        ? { ...c, bookmarkIds: [...c.bookmarkIds, ...source.bookmarkIds] }
+        : c
+    );
+
+  renderCategoryTree(currentCategories);
+}
+
+/**
+ * Handle delete category
+ */
+export function handleDeleteCategory(categoryId: string): void {
+  const category = currentCategories.find(c => c.id === categoryId);
+  if (!category) return;
+
+  if (!confirm(`Delete "${category.name}"? Bookmarks will be moved to Uncategorized.`)) {
+    return;
+  }
+
+  // Delete and move to Uncategorized
+  const bookmarkIds = category.bookmarkIds;
+  let result = currentCategories.filter(c => c.id !== categoryId);
+
+  if (bookmarkIds.length > 0) {
+    const uncategorized = result.find(c => c.name === 'Uncategorized');
+    if (uncategorized) {
+      result = result.map(c =>
+        c.name === 'Uncategorized'
+          ? { ...c, bookmarkIds: [...c.bookmarkIds, ...bookmarkIds] }
+          : c
+      );
+    } else {
+      result.push({
+        id: 'uncategorized',
+        name: 'Uncategorized',
+        bookmarkIds,
+      });
+    }
+  }
+
+  currentCategories = result;
+  renderCategoryTree(currentCategories);
+}
+
+/**
+ * Render category tree in editor
+ */
+export function renderCategoryTree(categories: EditedCategory[]): void {
+  const els = getElements();
+
+  // Clear existing
+  els.categoryTree.innerHTML = '';
+
+  // Return early if no categories
+  if (categories.length === 0) {
+    return;
+  }
+
+  // Get template
+  const template = document.getElementById('category-template') as HTMLTemplateElement;
+
+  categories.forEach(category => {
+    const clone = template.content.cloneNode(true) as DocumentFragment;
+    const item = clone.querySelector('.category-item') as HTMLElement;
+
+    // Set category data
+    item.dataset.categoryId = category.id;
+    item.querySelector('.category-name')!.textContent = category.name;
+    item.querySelector('.category-count')!.textContent = String(category.bookmarkIds.length);
+
+    // Add event listeners
+    const editBtn = item.querySelector('.btn-edit') as HTMLButtonElement;
+    const mergeBtn = item.querySelector('.btn-merge') as HTMLButtonElement;
+    const deleteBtn = item.querySelector('.btn-delete') as HTMLButtonElement;
+
+    editBtn.addEventListener('click', () => handleRenameCategory(category.id));
+    mergeBtn.addEventListener('click', () => handleMergeCategory(category.id));
+    deleteBtn.addEventListener('click', () => handleDeleteCategory(category.id));
+
+    els.categoryTree.appendChild(clone);
+  });
+}
+
+/**
  * Setup event listeners
  */
 export function setupEventListeners() {
@@ -316,6 +786,49 @@ export function setupEventListeners() {
   els.doneBtn.addEventListener('click', handleDone);
   els.retryBtn.addEventListener('click', handleRetry);
   els.resetBtn.addEventListener('click', handleReset);
+  els.notificationToggle.addEventListener('change', handleNotificationToggle);
+  els.autoNavigateToggle.addEventListener('change', handleAutoNavigateToggle);
+  els.detailsToggle.addEventListener('click', toggleDetails);
+
+  // Apply changes button
+  els.applyBtn.addEventListener('click', async () => {
+    try {
+      els.applyBtn.disabled = true;
+      els.applyBtn.textContent = 'Applying...';
+
+      await chrome.runtime.sendMessage({
+        type: 'APPLY_CATEGORY_EDIT',
+        categories: currentCategories,
+      });
+
+      // Show processing state
+      showState('processing');
+      updateProgress(0, 0, 'Applying changes...');
+    } catch (error) {
+      console.error('Failed to apply changes:', error);
+      els.applyBtn.disabled = false;
+      els.applyBtn.textContent = '✅ Apply Changes';
+    }
+  });
+
+  // Regenerate button
+  els.regenerateBtn.addEventListener('click', async () => {
+    if (!confirm('Regenerate categories? This will discard your edits.')) {
+      return;
+    }
+
+    try {
+      await chrome.runtime.sendMessage({
+        type: 'REGENERATE_CATEGORIES',
+      });
+
+      // Show processing state
+      showState('processing');
+      updateProgress(0, 0, 'Regenerating categories...');
+    } catch (error) {
+      console.error('Failed to regenerate:', error);
+    }
+  });
 }
 
 /**
@@ -330,10 +843,10 @@ export function setupMessageListener() {
 /**
  * Setup popup - initialize everything
  */
-export function setupPopup() {
+export async function setupPopup() {
   setupEventListeners();
   setupMessageListener();
-  init();
+  await init();
 }
 
 // Auto-setup when DOM is ready (only in browser environment)

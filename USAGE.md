@@ -86,6 +86,96 @@ pnpm test:coverage    # Tests with coverage report
     └── slow-server.com (timeout)
 ```
 
+## Trial Mode
+
+Test the organization workflow with a small subset before processing all bookmarks:
+
+1. **Enter trial count**: In the popup, enter a number (10-500) in the trial input field
+2. **Click "Organize Bookmarks"**: Processes only the specified number of randomly selected bookmarks
+3. **Check results**: Review the timestamped folder, e.g., `📁Organized (Trial 50) - 2026-05-14/`
+4. **Run multiple trials**: Each trial creates a new timestamped folder
+5. **Run full mode**: Leave input empty to process all bookmarks to `📁Organized/`
+
+**Trial mode benefits:**
+- Quick validation of categorization quality
+- Test workflow before committing to full processing
+- Multiple trials can coexist with timestamp-based naming
+- Full run creates separate clean `📁Organized/` folder
+
+**Limits:**
+- Minimum: 10 bookmarks
+- Maximum: 500 bookmarks
+- Default: 50 bookmarks
+
+## Background Notifications
+
+Get notified when bookmark organization completes, even if you close the popup:
+
+1. **Enable notifications**: Toggle is on by default in the popup
+2. **Start organization**: Click "Organize Bookmarks"
+3. **Close popup**: Feel free to close the popup and do other work
+4. **Get notified**: When complete, you'll see a notification with summary
+
+**Notification shows:**
+- Total bookmarks processed
+- Categories created
+- Deadlinks found
+- Duplicates merged
+
+**Preferences:**
+- Toggle notifications on/off in the popup
+- Setting is saved automatically
+
+## Auto-navigate to Bookmarks Manager
+
+Automatically open Chrome's Bookmarks Manager when organization completes:
+
+1. **Enable auto-navigate**: Toggle is on by default in the popup
+2. **Start organization**: Click "Organize Bookmarks"
+3. **Auto-open**: When complete, Chrome's Bookmarks Manager opens automatically
+4. **Folder focus**: The page navigates to the organized folder
+
+**Works with:**
+- Full mode: Opens to `📁Organized/` folder
+- Trial mode: Opens to `📁Organized (Trial N) - YYYY-MM-DD/` folder
+
+**Preferences:**
+- Toggle auto-navigate on/off in the popup
+- Setting is saved automatically
+
+## Detailed Progress Metrics
+
+See detailed metrics during organization:
+
+1. **Click "Show Details"** during processing to expand the metrics panel
+2. **View real-time stats** for each phase:
+   - **Fetch**: URLs processed, success/fail counts, timing
+   - **Storage**: IndexedDB reads/writes, checkpoint saves
+   - **Categorization**: Vocabulary size, clusters, iterations
+   - **Organization**: Folders/bookmarks created, batch timing
+   - **Performance**: Elapsed time, memory estimate
+
+**Toggle any time** during processing to show or hide details.
+
+## Category Preview and Editing
+
+After categorization completes, you can review and edit the generated categories:
+
+1. **Review Categories**: Browse the category tree showing all generated categories
+2. **Rename**: Click ✏️ to rename a category
+3. **Merge**: Click 🔀 to merge two categories
+4. **Delete**: Click 🗑️ to delete a category (bookmarks move to "Uncategorized")
+5. **Apply Changes**: Click "✅ Apply Changes" to proceed with organization
+6. **Regenerate**: Click "🔄 Regenerate" to re-run categorization
+
+### Editing Operations
+
+- **Rename**: Changes the category name for all bookmarks in that category
+- **Merge**: Combines two categories, moving all bookmarks from source to target
+- **Delete**: Removes the category and moves bookmarks to "Uncategorized"
+
+Note: Complex operations like drag-drop and undo/redo are not supported to keep the interface simple.
+
 ## Troubleshooting
 
 | Issue | Solution |

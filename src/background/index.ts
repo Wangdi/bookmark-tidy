@@ -1,6 +1,6 @@
 // src/background/index.ts
 
-import { RawBookmark, ProgressEvent, OrganizerState } from "../types";
+import { RawBookmark, ProgressEvent, OrganizerState, OrganizationOptions, TrialInfo, NotificationOptions, NotificationPayload, UserPreferences, OrganizedFolderInfo, DetailedMetrics, EditedCategory, CategoryEditAction, CategorizedBookmark } from "../types";
 import { fetchBookmark } from "../modules/fetcher";
 import { dedupeBookmarks } from "../modules/deduper";
 import { categorizeBookmarks, categorizeBookmarksSparse } from "../modules/categorizer";
@@ -11,6 +11,10 @@ import {
   clearAll,
   saveCheckpoint,
   loadCheckpoint,
+  saveEditedCategories,
+  getEditedCategories,
+  clearEditedCategories,
+  estimateStorageSize,
 } from "../lib/storage";
 
 /**
@@ -18,6 +22,21 @@ import {
  */
 const FETCH_BATCH_SIZE = 10;  // Number of URLs to fetch concurrently
 const SPARSE_THRESHOLD = 500; // Use sparse vectors for collections > 500 bookmarks
+
+/**
+ * Category editor configuration (exported for testing)
+ */
+export const config = {
+  categoryEditTimeoutMs: 300000, // 5 minutes
+  categoryEditPollIntervalMs: 500, // Poll every 500ms
+};
+
+/**
+ * Trial mode configuration
+ */
+export const TRIAL_MIN_BOOKMARKS = 10;
+export const TRIAL_MAX_BOOKMARKS = 500;
+export const TRIAL_DEFAULT_BOOKMARKS = 50;
 
 /**
  * State manager - exported for testing
@@ -28,12 +47,51 @@ export const state: OrganizerState = {
   current: 0,
   total: 0,
   currentUrl: undefined,
+  isTrialMode: false,
+  regenerateRequested: false,
 };
 
 /**
  * AbortController for cancelling in-flight fetch operations
  */
 let fetchAbortController: AbortController | null = null;
+
+/**
+ * Generate trial folder name with count and timestamp
+ * Format: 📁Organized (Trial N) - YYYY-MM-DD
+ */
+export function generateTrialFolderName(
+  count: number,
+  date?: string
+): string {
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  return `📁Organized (Trial ${count}) - ${dateStr}`;
+}
+
+/**
+ * Fisher-Yates shuffle for uniform random selection
+ */
+export function shuffleArray<T>(array: T[]): T[] {
+  const shuffled = [...array];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled;
+}
+
+/**
+ * Select N random bookmarks from pool
+ */
+export function selectRandomBookmarks<T>(
+  bookmarks: T[],
+  count: number
+): T[] {
+  if (count >= bookmarks.length) {
+    return bookmarks;
+  }
+  return shuffleArray(bookmarks).slice(0, count);
+}
 
 /**
  * Reset state (for testing)
@@ -44,6 +102,288 @@ export function resetState(): void {
   state.current = 0;
   state.total = 0;
   state.currentUrl = undefined;
+  state.isTrialMode = false;
+  state.regenerateRequested = false;
+}
+
+/**
+ * Apply a category edit action (rename, merge, delete)
+ */
+export function applyCategoryEdit(
+  categories: EditedCategory[],
+  action: CategoryEditAction
+): EditedCategory[] {
+  switch (action.type) {
+    case 'rename': {
+      const category = categories.find(c => c.id === action.categoryId);
+      if (!category) throw new Error('Category not found');
+
+      return categories.map(c =>
+        c.id === action.categoryId ? { ...c, name: action.newName } : c
+      );
+    }
+
+    case 'merge': {
+      const source = categories.find(c => c.id === action.sourceCategoryId);
+      const target = categories.find(c => c.id === action.targetCategoryId);
+
+      if (!source || !target) throw new Error('Category not found');
+
+      return categories
+        .filter(c => c.id !== action.sourceCategoryId)
+        .map(c =>
+          c.id === action.targetCategoryId
+            ? { ...c, bookmarkIds: [...c.bookmarkIds, ...source.bookmarkIds] }
+            : c
+        );
+    }
+
+    case 'delete': {
+      const category = categories.find(c => c.id === action.categoryId);
+      if (!category) throw new Error('Category not found');
+
+      const bookmarkIds = category.bookmarkIds;
+      let result = categories.filter(c => c.id !== action.categoryId);
+
+      if (bookmarkIds.length > 0) {
+        const uncategorized = result.find(c => c.name === 'Uncategorized');
+        if (uncategorized) {
+          result = result.map(c =>
+            c.name === 'Uncategorized'
+              ? { ...c, bookmarkIds: [...c.bookmarkIds, ...bookmarkIds] }
+              : c
+          );
+        } else {
+          result.push({
+            id: 'uncategorized',
+            name: 'Uncategorized',
+            bookmarkIds,
+          });
+        }
+      }
+
+      return result;
+    }
+  }
+}
+
+/**
+ * Convert CategorizedBookmark array to EditedCategory array
+ * Groups bookmarks by category and creates EditedCategory objects
+ */
+export function convertToEditedCategories(bookmarks: CategorizedBookmark[]): EditedCategory[] {
+  const categoryMap = new Map<string, string[]>();
+
+  for (const bookmark of bookmarks) {
+    const categoryName = bookmark.category || 'Uncategorized';
+    if (!categoryMap.has(categoryName)) {
+      categoryMap.set(categoryName, []);
+    }
+    categoryMap.get(categoryName)!.push(bookmark.id);
+  }
+
+  return Array.from(categoryMap.entries()).map(([name, bookmarkIds]) => ({
+    id: name.toLowerCase().replace(/\s+/g, '-'),
+    name,
+    bookmarkIds,
+  }));
+}
+
+/**
+ * Convert EditedCategory array back to CategorizedBookmark array
+ * Uses the original bookmarks to preserve all bookmark data
+ */
+export function convertFromEditedCategories(
+  editedCategories: EditedCategory[],
+  originalBookmarks: CategorizedBookmark[]
+): CategorizedBookmark[] {
+  const result: CategorizedBookmark[] = [];
+  const processedIds = new Set<string>();
+
+  for (const category of editedCategories) {
+    for (const bookmarkId of category.bookmarkIds) {
+      const original = originalBookmarks.find(b => b.id === bookmarkId);
+      if (original && !processedIds.has(bookmarkId)) {
+        result.push({ ...original, category: category.name });
+        processedIds.add(bookmarkId);
+      }
+    }
+  }
+
+  // Add any bookmarks that weren't in edited categories (shouldn't happen normally)
+  for (const bookmark of originalBookmarks) {
+    if (!processedIds.has(bookmark.id)) {
+      result.push(bookmark);
+    }
+  }
+
+  return result;
+}
+
+/**
+ * Check if popup is currently focused/connected
+ */
+export async function isPopupFocused(): Promise<boolean> {
+  try {
+    // Try to connect to popup - if it exists, it's focused
+    const port = chrome.runtime.connect({ name: 'popup-check' });
+    port.disconnect();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Send Chrome notification
+ */
+export async function sendNotification(payload: NotificationPayload): Promise<string> {
+  let message = payload.message;
+
+  // Append stats if provided
+  if (payload.stats) {
+    message = `${payload.message}\n\n` +
+      `📊 ${payload.stats.processed} bookmarks processed\n` +
+      `📁 ${payload.stats.categories} categories created\n` +
+      `⚠️ ${payload.stats.deadlinks} deadlinks found\n` +
+      `🔄 ${payload.stats.duplicatesMerged} duplicates merged`;
+  }
+
+  // Append error if provided
+  if (payload.error) {
+    message = `${message}\n\n❌ Error: ${payload.error}`;
+  }
+
+  const notificationId = await chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'icons/icon128.png',
+    title: payload.title,
+    message: message,
+    priority: 2,
+    requireInteraction: false,
+  });
+
+  return notificationId;
+}
+
+/**
+ * Get notification preferences from storage
+ */
+export async function getNotificationPreferences(): Promise<NotificationOptions> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return { enabled: true };
+  }
+  const result = await chrome.storage.sync.get('notificationOptions');
+  return result.notificationOptions || { enabled: true };
+}
+
+/**
+ * Set notification preferences in storage
+ */
+export async function setNotificationPreferences(options: NotificationOptions): Promise<void> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return;
+  }
+  await chrome.storage.sync.set({ notificationOptions: options });
+}
+
+/**
+ * Handle notification click - open popup or bookmarks page
+ */
+export async function handleNotificationClick(notificationId: string): Promise<void> {
+  try {
+    // Try to open popup (works if extension is in toolbar)
+    await chrome.action.openPopup();
+  } catch {
+    // Fallback: open bookmarks page
+    await chrome.tabs.create({ url: 'chrome://bookmarks/' });
+  }
+
+  // Clear the notification
+  await chrome.notifications.clear(notificationId);
+}
+
+/**
+ * Find a folder by title in the bookmark tree
+ */
+export async function findFolderByTitle(title: string): Promise<OrganizedFolderInfo | null> {
+  const tree = await chrome.bookmarks.getTree();
+
+  function searchFolder(node: chrome.bookmarks.BookmarkTreeNode): chrome.bookmarks.BookmarkTreeNode | null {
+    if (node.title === title && !node.url) {
+      return node;
+    }
+    for (const child of node.children || []) {
+      const found = searchFolder(child);
+      if (found) return found;
+    }
+    return null;
+  }
+
+  for (const root of tree) {
+    for (const child of root.children || []) {
+      const found = searchFolder(child);
+      if (found) {
+        return {
+          id: found.id,
+          title: found.title,
+          isTrial: title.includes('Trial'),
+        };
+      }
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Get user preferences from storage
+ */
+export async function getUserPreferences(): Promise<UserPreferences> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return { autoNavigate: true };
+  }
+  const result = await chrome.storage.sync.get('userPreferences');
+  return result.userPreferences || { autoNavigate: true };
+}
+
+/**
+ * Set user preferences in storage
+ */
+export async function setUserPreferences(preferences: UserPreferences): Promise<void> {
+  // Check if chrome.storage is available
+  if (!chrome?.storage?.sync) {
+    return;
+  }
+  await chrome.storage.sync.set({ userPreferences: preferences });
+}
+
+/**
+ * Navigate to bookmarks manager with optional folder focus
+ */
+export async function navigateToBookmarksManager(folderId?: string): Promise<void> {
+  const url = folderId
+    ? `chrome://bookmarks/#${folderId}`
+    : 'chrome://bookmarks/';
+
+  // Check if bookmarks tab is already open
+  const tabs = await chrome.tabs.query({ url: 'chrome://bookmarks/*' });
+
+  if (tabs.length > 0) {
+    // Focus existing tab
+    await chrome.tabs.update(tabs[0].id!, { active: true });
+    await chrome.windows.update(tabs[0].windowId!, { focused: true });
+    // Navigate to specific folder
+    if (folderId) {
+      await chrome.tabs.update(tabs[0].id!, { url });
+    }
+  } else {
+    // Open new tab
+    await chrome.tabs.create({ url });
+  }
 }
 
 /**
@@ -132,12 +472,21 @@ export async function sendProgress(event: ProgressEvent): Promise<void> {
  * Run the organization pipeline with two-phase processing
  * Phase 1: Fetch bookmarks in batches and store to IndexedDB
  * Phase 2: Load from IndexedDB, categorize, and organize
+ * @param options Optional configuration for trial mode
  * @returns true if operation started, false if already running
  */
-export async function runOrganization(): Promise<boolean> {
+export async function runOrganization(options?: OrganizationOptions): Promise<boolean> {
   if (state.isRunning) {
     return false;
   }
+
+  // Detailed metrics tracking
+  const metrics: DetailedMetrics = {};
+  const startTime = Date.now();
+  let fetchSuccessCount = 0;
+  let fetchFailedCount = 0;
+  let fetchTimedOutCount = 0;
+  let totalFetchTime = 0;
 
   state.isRunning = true;
   state.shouldAbort = false;
@@ -156,16 +505,49 @@ export async function runOrganization(): Promise<boolean> {
       return true;
     }
 
-    const total = rawBookmarks.length;
+    const totalCount = rawBookmarks.length;
+
+    // Determine if trial mode
+    const isTrialMode = options?.maxBookmarks !== undefined && options.maxBookmarks < totalCount;
+    state.isTrialMode = isTrialMode;
+
+    // Select bookmarks for processing
+    let bookmarksToProcess: RawBookmark[];
+    let trialInfo: TrialInfo | undefined;
+
+    if (isTrialMode) {
+      bookmarksToProcess = selectRandomBookmarks(rawBookmarks, options!.maxBookmarks!);
+      trialInfo = {
+        folderName: generateTrialFolderName(options!.maxBookmarks!),
+        processedCount: bookmarksToProcess.length,
+        totalCount,
+      };
+    } else {
+      bookmarksToProcess = rawBookmarks;
+    }
+
+    const total = bookmarksToProcess.length;
 
     // Load checkpoint to see if we can resume
     const checkpoint = await loadCheckpoint();
 
+    // Send initial trial mode info
+    if (isTrialMode && trialInfo) {
+      await sendProgress({
+        type: "progress",
+        current: 0,
+        total,
+        currentUrl: `Trial mode: Processing ${total} of ${totalCount} bookmarks`,
+        isTrialMode: true,
+        trialInfo,
+      });
+    }
+
     // ===== PHASE 1: FETCH TO STORAGE =====
     if (!checkpoint || checkpoint.phase === 'fetching') {
       const pending = checkpoint?.pendingIds
-        ? rawBookmarks.filter(b => checkpoint.pendingIds.includes(b.id))
-        : rawBookmarks;
+        ? bookmarksToProcess.filter(b => checkpoint.pendingIds.includes(b.id))
+        : bookmarksToProcess;
 
       const fetchedIds = checkpoint?.fetchedIds ?? [];
 
@@ -200,6 +582,9 @@ export async function runOrganization(): Promise<boolean> {
 
         const batch = pending.slice(i, i + FETCH_BATCH_SIZE);
 
+        // Track batch timing
+        const batchStartTime = Date.now();
+
         // Create new AbortController for this batch so cancel can abort in-flight fetches
         fetchAbortController = new AbortController();
         const abortSignal = fetchAbortController.signal;
@@ -208,6 +593,21 @@ export async function runOrganization(): Promise<boolean> {
         const results = await Promise.all(
           batch.map(b => fetchBookmark(b, abortSignal))
         );
+
+        // Track batch fetch time
+        const batchFetchTime = Date.now() - batchStartTime;
+        totalFetchTime += batchFetchTime;
+
+        // Track success/failure counts
+        for (const result of results) {
+          if (result.status === 'ok') {
+            fetchSuccessCount++;
+          } else if (result.status === 'deadlink') {
+            fetchFailedCount++;
+          } else if (result.status === 'unreachable') {
+            fetchTimedOutCount++;
+          }
+        }
 
         // Clear abort controller after batch completes
         fetchAbortController = null;
@@ -237,17 +637,45 @@ export async function runOrganization(): Promise<boolean> {
           lastUpdated: Date.now(),
         });
 
-        // Update progress - show actual URL being processed
-        const lastUrl = batch[batch.length - 1]?.url;
+        // Build live metrics
+        const diskUsage = await estimateStorageSize();
+        const memoryUsed = (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory?.usedJSHeapSize || 0;
+
+        // Update progress - show actual URLs being processed
+        const batchUrls = batch.map(b => b.url);
         state.current = fetchedIds.length;
         state.total = total;
-        state.currentUrl = lastUrl ?? `Fetched ${fetchedIds.length}/${total}`;
+        state.currentUrl = batchUrls[batchUrls.length - 1] ?? `Fetched ${fetchedIds.length}/${total}`;
 
         await sendProgress({
           type: "progress",
           current: fetchedIds.length,
           total,
-          currentUrl: lastUrl ?? `Fetched ${fetchedIds.length}/${total}`,
+          currentUrl: batchUrls[batchUrls.length - 1] ?? `Fetched ${fetchedIds.length}/${total}`,
+          detailedMetrics: {
+            fetch: {
+              totalUrls: total,
+              successful: fetchSuccessCount,
+              failed: fetchFailedCount,
+              timedOut: fetchTimedOutCount,
+              averageTime: fetchedIds.length > 0 ? Math.round(totalFetchTime / fetchedIds.length) : 0,
+              totalTime: totalFetchTime,
+              currentUrls: batchUrls,
+            },
+            storage: {
+              indexedDbWrites: fetchedIds.length,
+              indexedDbReads: 0,
+              checkpointSaves: Math.ceil(fetchedIds.length / FETCH_BATCH_SIZE),
+              estimatedSize: diskUsage,
+              diskUsage,
+            },
+            performance: {
+              totalElapsed: Date.now() - startTime,
+              averagePerBookmark: fetchedIds.length > 0 ? Math.round((Date.now() - startTime) / fetchedIds.length) : 0,
+              memoryEstimate: memoryUsed,
+              memoryUsed,
+            },
+          },
         });
       }
     }
@@ -290,16 +718,95 @@ export async function runOrganization(): Promise<boolean> {
     });
     const dedupeResult = dedupeBookmarks(fetchedBookmarks);
 
-    // Categorize (use sparse vectors for large collections)
-    await sendProgress({
-      type: "progress",
-      current: 0,
-      total: 1,
-      currentUrl: "Categorizing...",
-    });
-    const categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
+    // ===== CATEGORIZATION + CATEGORY EDITOR LOOP =====
+    // This loop allows re-categorization when regenerate is requested
+    let categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
       ? categorizeBookmarksSparse(dedupeResult.bookmarks)
       : categorizeBookmarks(dedupeResult.bookmarks);
+    let finalBookmarks: CategorizedBookmark[] = categorizeResult.bookmarks;
+    let regenerateLoop = true;
+
+    while (regenerateLoop) {
+      regenerateLoop = false; // Will be set to true if regenerate requested
+
+      // ===== CATEGORY EDITOR: Convert categories and send for editing =====
+      const originalCategories = convertToEditedCategories(categorizeResult.bookmarks);
+
+      // Send categories to UI for editing
+      await sendProgress({
+        type: "progress",
+        current: 0,
+        total: 1,
+        currentUrl: "Categories generated - waiting for review",
+        categories: originalCategories,
+      });
+
+      // Clear any previous edited categories before waiting
+      await clearEditedCategories();
+
+      // Wait for user edits with timeout (5 minutes)
+      const CATEGORY_EDIT_TIMEOUT = config.categoryEditTimeoutMs;
+      const CATEGORY_EDIT_POLL_INTERVAL = config.categoryEditPollIntervalMs;
+      const editStartTime = Date.now();
+      let editedCategories: EditedCategory[] = [];
+      let hasUserEdits = false;
+
+      while (!hasUserEdits && Date.now() - editStartTime < CATEGORY_EDIT_TIMEOUT) {
+        if (state.shouldAbort) {
+          await sendProgress({
+            type: "error",
+            current: 0,
+            total: 0,
+            error: "Operation cancelled",
+          });
+          return true;
+        }
+
+        // Check for regenerate request
+        if (state.regenerateRequested) {
+          state.regenerateRequested = false;
+          // Re-categorize and loop again
+          await sendProgress({
+            type: "progress",
+            current: 0,
+            total: 1,
+            currentUrl: "Re-categorizing...",
+          });
+          categorizeResult = fetchedBookmarks.length > SPARSE_THRESHOLD
+            ? categorizeBookmarksSparse(dedupeResult.bookmarks)
+            : categorizeBookmarks(dedupeResult.bookmarks);
+          regenerateLoop = true;
+          break;
+        }
+
+        editedCategories = await getEditedCategories();
+        if (editedCategories.length > 0) {
+          hasUserEdits = true;
+          break;
+        }
+
+        // Wait before checking again
+        await new Promise(resolve => setTimeout(resolve, CATEGORY_EDIT_POLL_INTERVAL));
+      }
+
+      // If regenerate was requested, continue the outer loop
+      if (regenerateLoop) {
+        continue;
+      }
+
+      // Use edited categories if available, otherwise use original
+      if (hasUserEdits && editedCategories.length > 0) {
+        finalBookmarks = convertFromEditedCategories(editedCategories, categorizeResult.bookmarks);
+      } else {
+        finalBookmarks = categorizeResult.bookmarks;
+      }
+
+      // Clear edited categories for next run
+      await clearEditedCategories();
+
+      // Exit the loop - we have final bookmarks
+      break;
+    }
 
     // Update checkpoint to organizing phase
     await saveCheckpoint({
@@ -317,33 +824,98 @@ export async function runOrganization(): Promise<boolean> {
     });
     const deadlinks = fetchedBookmarks.filter(b => b.status === 'deadlink');
     const unreachable = fetchedBookmarks.filter(b => b.status === 'unreachable');
+
+    // Determine folder name based on mode
+    const folderName = isTrialMode && trialInfo
+      ? trialInfo.folderName
+      : '📁Organized';
+
     const organizeResult = await organizeBookmarks(
-      categorizeResult.bookmarks,
+      finalBookmarks,
       deadlinks,
       unreachable,
       dedupeResult.duplicatesMerged,
+      folderName,
     );
 
     // Clear storage and checkpoint
     await clearAll();
 
-    // Send completion
+    // Build metrics before sending completion
+    metrics.fetch = {
+      totalUrls: total,
+      successful: fetchSuccessCount,
+      failed: fetchFailedCount,
+      timedOut: fetchTimedOutCount,
+      averageTime: total > 0 ? Math.round(totalFetchTime / total) : 0,
+      totalTime: totalFetchTime,
+    };
+
+    metrics.performance = {
+      totalElapsed: Date.now() - startTime,
+      averagePerBookmark: total > 0 ? Math.round((Date.now() - startTime) / total) : 0,
+      memoryEstimate: 0, // Could use performance.memory if available
+    };
+
+    // Send completion with trial info
     await sendProgress({
       type: "complete",
       current: total,
       total,
       stats: organizeResult.stats,
+      isTrialMode,
+      trialInfo,
+      detailedMetrics: metrics,
     });
+
+    // Send notification if popup not focused and notifications enabled
+    const popupFocused = await isPopupFocused();
+    const notificationPrefs = await getNotificationPreferences();
+
+    if (!popupFocused && notificationPrefs.enabled !== false) {
+      await sendNotification({
+        type: 'success',
+        title: 'Bookmark Tidy - Organization Complete',
+        message: 'Successfully organized your bookmarks!',
+        stats: organizeResult.stats,
+      });
+    }
+
+    // Auto-navigate to bookmarks manager if enabled
+    const userPrefs = await getUserPreferences();
+    if (userPrefs.autoNavigate !== false) {
+      const targetFolderName = isTrialMode && trialInfo ? trialInfo.folderName : '📁Organized';
+      const folderInfo = await findFolderByTitle(targetFolderName);
+      if (folderInfo) {
+        await navigateToBookmarksManager(folderInfo.id);
+      }
+    }
   } catch (error) {
+    const errorMessage = (error as Error).message;
     await sendProgress({
       type: "error",
       current: 0,
       total: 0,
-      error: (error as Error).message,
+      error: errorMessage,
     });
+
+    // Send notification if popup not focused and notifications enabled
+    const popupFocused = await isPopupFocused();
+    const notificationPrefs = await getNotificationPreferences();
+
+    if (!popupFocused && notificationPrefs.enabled !== false) {
+      await sendNotification({
+        type: 'error',
+        title: 'Bookmark Tidy - Organization Failed',
+        message: 'An error occurred during organization.',
+        error: errorMessage,
+      });
+    }
   } finally {
     state.isRunning = false;
     state.shouldAbort = false;
+    state.isTrialMode = false;
+    state.regenerateRequested = false;
   }
 
   return true;
@@ -368,7 +940,8 @@ export function cancelOperation(): void {
 
 /**
  * Reset all storage and organized folder
- * Clears IndexedDB data and deletes the 📁Organized folder
+ * Clears IndexedDB data and deletes only the main 📁Organized folder
+ * (preserves trial folders for user review)
  */
 export async function resetStorage(): Promise<void> {
   // Cancel any running operation first
@@ -381,8 +954,9 @@ export async function resetStorage(): Promise<void> {
   // Clear IndexedDB storage
   await clearAll();
 
-  // Delete the organized folder
-  await clearOrganizedFolder();
+  // Delete only the main organized folder (not trial folders)
+  // Trial folders are preserved for user review
+  await clearOrganizedFolder('📁Organized');
 }
 
 /**
@@ -396,12 +970,15 @@ export function getState(): OrganizerState {
  * Handle message from popup
  */
 export function handleMessage(
-  message: { type: string },
+  message: { type: string; maxBookmarks?: number; categories?: EditedCategory[] },
   _sender: chrome.runtime.MessageSender,
   sendResponse: (response?: unknown) => void
 ): boolean {
   if (message.type === "START_ORGANIZE") {
-    runOrganization().then(started => {
+    const options: OrganizationOptions = {
+      maxBookmarks: message.maxBookmarks,
+    };
+    runOrganization(options).then(started => {
       sendResponse({ success: true, started });
     });
     return true; // Keep message channel open for async response
@@ -417,6 +994,18 @@ export function handleMessage(
       sendResponse({ success: false, error: (error as Error).message });
     });
     return true; // Keep message channel open for async response
+  } else if (message.type === "APPLY_CATEGORY_EDIT") {
+    saveEditedCategories(message.categories!).then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
+  } else if (message.type === "REGENERATE_CATEGORIES") {
+    // Set regenerate flag instead of abort - this triggers re-categorization
+    state.regenerateRequested = true;
+    clearEditedCategories().then(() => {
+      sendResponse({ success: true });
+    });
+    return true;
   }
   return true; // Keep message channel open for async response
 }
@@ -428,8 +1017,16 @@ export function setupMessageListener(): void {
   chrome.runtime.onMessage.addListener(handleMessage);
 }
 
+/**
+ * Setup notification click listener
+ */
+export function setupNotificationListener(): void {
+  chrome.notifications.onClicked.addListener(handleNotificationClick);
+}
+
 // Auto-setup when service worker loads (only in browser environment)
 if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
   setupMessageListener();
+  setupNotificationListener();
   console.log("Bookmark Tidy service worker started");
 }

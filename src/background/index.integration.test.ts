@@ -9,12 +9,22 @@ import {
   cancelOperation,
   handleMessage,
   resetStorage,
+  config,
 } from '../background/index';
+
+// Set short timeout for category editor tests
+config.categoryEditTimeoutMs = 100;
+config.categoryEditPollIntervalMs = 10;
 
 // Mock Chrome APIs
 const mockGetTree = vi.fn();
 const mockSendMessage = vi.fn();
 const mockAddListener = vi.fn();
+const mockStorageSyncGet = vi.fn().mockResolvedValue({});
+const mockConnect = vi.fn();
+const mockNotificationsCreate = vi.fn().mockResolvedValue('notification-id');
+const mockNotificationsClear = vi.fn().mockResolvedValue(true);
+const mockNotificationsOnClicked = { addListener: vi.fn() };
 
 vi.stubGlobal('chrome', {
   bookmarks: {
@@ -22,15 +32,33 @@ vi.stubGlobal('chrome', {
   },
   runtime: {
     sendMessage: mockSendMessage,
+    connect: mockConnect,
     onMessage: {
       addListener: mockAddListener,
       removeListener: vi.fn(),
     },
   },
+  storage: {
+    sync: {
+      get: mockStorageSyncGet,
+    },
+  },
+  notifications: {
+    create: mockNotificationsCreate,
+    clear: mockNotificationsClear,
+    onClicked: mockNotificationsOnClicked,
+  },
+  action: {
+    openPopup: vi.fn().mockRejectedValue(new Error('Popup not available')),
+  },
+  tabs: {
+    create: vi.fn().mockResolvedValue({}),
+  },
 });
 
 // Mock IndexedDB storage module
 const mockStoredBookmarks: Array<{ id: string; url: string; title: string; meta: object; headings: string[]; status: string }> = [];
+const mockEditedCategories: Array<{ id: string; name: string; bookmarkIds: string[] }> = [];
 
 vi.mock('../lib/storage', () => ({
   storeFetched: vi.fn(async (bookmarks: unknown[]) => {
@@ -42,6 +70,15 @@ vi.mock('../lib/storage', () => ({
   }),
   saveCheckpoint: vi.fn(async () => {}),
   loadCheckpoint: vi.fn(async () => null),
+  saveEditedCategories: vi.fn(async (categories: unknown[]) => {
+    mockEditedCategories.length = 0;
+    mockEditedCategories.push(...(categories as Array<{ id: string; name: string; bookmarkIds: string[] }>));
+  }),
+  getEditedCategories: vi.fn(async () => [...mockEditedCategories]),
+  clearEditedCategories: vi.fn(async () => {
+    mockEditedCategories.length = 0;
+  }),
+  estimateStorageSize: vi.fn(async () => 1024),
 }));
 
 // Mock modules
@@ -107,6 +144,7 @@ describe('background integration tests', () => {
     resetState();
     vi.clearAllMocks();
     mockStoredBookmarks.length = 0;  // Clear stored bookmarks between tests
+    mockEditedCategories.length = 0; // Clear edited categories between tests
 
     // Default mock responses
     mockGetTree.mockResolvedValue([
@@ -701,6 +739,142 @@ describe('background integration tests', () => {
       await new Promise(resolve => setTimeout(resolve, 150));
 
       expect(responses[0]).toEqual({ success: false, error: 'Storage error' });
+    });
+  });
+
+  describe('handleMessage category editor', () => {
+    it('handles APPLY_CATEGORY_EDIT message', async () => {
+      const sendResponse = vi.fn();
+
+      handleMessage(
+        {
+          type: 'APPLY_CATEGORY_EDIT',
+          categories: [
+            { id: 'cat-1', name: 'Edited', bookmarkIds: ['bm-1'] },
+          ],
+        },
+        {} as chrome.runtime.MessageSender,
+        sendResponse
+      );
+
+      // Wait for async
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(sendResponse).toHaveBeenCalledWith({ success: true });
+
+      // Verify categories saved
+      const { getEditedCategories } = await import('../lib/storage');
+      const stored = await vi.mocked(getEditedCategories)();
+      expect(stored).toEqual([
+        { id: 'cat-1', name: 'Edited', bookmarkIds: ['bm-1'] },
+      ]);
+    });
+
+    it('handles REGENERATE_CATEGORIES message', async () => {
+      const sendResponse = vi.fn();
+
+      // Reset state
+      resetState();
+      state.regenerateRequested = false;
+
+      handleMessage(
+        { type: 'REGENERATE_CATEGORIES' },
+        {} as chrome.runtime.MessageSender,
+        sendResponse
+      );
+
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect(state.regenerateRequested).toBe(true);
+      expect(sendResponse).toHaveBeenCalledWith({ success: true });
+    });
+  });
+
+  describe('runOrganization category editor', () => {
+    it('sends categories after categorization phase', async () => {
+      // Mock categorizer to return known categories
+      const { categorizeBookmarks } = await import('../modules/categorizer');
+      vi.mocked(categorizeBookmarks).mockImplementationOnce((bookmarks) => ({
+        bookmarks: bookmarks.map((b, i) => ({
+          ...b,
+          category: i < 1 ? 'Development' : 'News',
+        })),
+        categoryNames: ['Development', 'News'],
+      }));
+
+      resetState();
+      vi.clearAllMocks();
+
+      await runOrganization();
+
+      // Should send categories in progress message during categorization phase
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'progress',
+          categories: expect.arrayContaining([
+            expect.objectContaining({ name: 'Development' }),
+            expect.objectContaining({ name: 'News' }),
+          ]),
+        })
+      );
+    });
+
+    it('waits for edited categories before organizing', async () => {
+      const { categorizeBookmarks } = await import('../modules/categorizer');
+      vi.mocked(categorizeBookmarks).mockImplementationOnce((bookmarks) => ({
+        bookmarks: bookmarks.map((b, i) => ({
+          ...b,
+          category: i < 1 ? 'Development' : 'News',
+        })),
+        categoryNames: ['Development', 'News'],
+      }));
+
+      const { getEditedCategories, clearEditedCategories } = await import('../lib/storage');
+
+      // Mock edited categories to be returned after a delay
+      let callCount = 0;
+      vi.mocked(getEditedCategories).mockImplementation(async () => {
+        callCount++;
+        if (callCount <= 2) return []; // First few calls return empty
+        // Later call returns edited categories
+        return [
+          { id: 'coding', name: 'Coding', bookmarkIds: ['1'] },
+          { id: 'news', name: 'News', bookmarkIds: ['2'] },
+        ];
+      });
+
+      resetState();
+      vi.clearAllMocks();
+      await runOrganization();
+
+      // Verify clearEditedCategories was called after using edited categories
+      expect(vi.mocked(clearEditedCategories)).toHaveBeenCalled();
+    });
+
+    it('uses original categories if no edits received within timeout', async () => {
+      const { categorizeBookmarks } = await import('../modules/categorizer');
+      vi.mocked(categorizeBookmarks).mockImplementationOnce((bookmarks) => ({
+        bookmarks: bookmarks.map((b, i) => ({
+          ...b,
+          category: i < 1 ? 'Development' : 'News',
+        })),
+        categoryNames: ['Development', 'News'],
+      }));
+
+      const { getEditedCategories } = await import('../lib/storage');
+      // Always return empty - simulating timeout waiting for user edits
+      vi.mocked(getEditedCategories).mockResolvedValue([]);
+
+      resetState();
+      vi.clearAllMocks();
+      await runOrganization();
+
+      // Should still complete successfully
+      expect(mockSendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'complete',
+        })
+      );
     });
   });
 });

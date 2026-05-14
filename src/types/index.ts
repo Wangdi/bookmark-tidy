@@ -23,6 +23,12 @@ export interface CategorizedBookmark extends ProcessedBookmark {
   subCategory?: string;
 }
 
+export interface TrialInfo {
+  folderName: string;       // e.g., "📁Organized (Trial 25) - 2026-05-14"
+  processedCount: number;   // Number of bookmarks in trial
+  totalCount: number;       // Total bookmarks available
+}
+
 export interface ProgressEvent {
   type: 'progress' | 'complete' | 'error';
   current: number;
@@ -36,6 +42,10 @@ export interface ProgressEvent {
     categories: number;
   };
   error?: string;
+  isTrialMode?: boolean;  // Flag for trial mode
+  trialInfo?: TrialInfo;  // Trial-specific information
+  detailedMetrics?: DetailedMetrics;  // Detailed performance metrics
+  categories?: EditedCategory[];  // Category structure for editor
 }
 
 export interface OrganizerState {
@@ -45,9 +55,103 @@ export interface OrganizerState {
   current: number;
   total: number;
   currentUrl?: string;
+  isTrialMode?: boolean;  // Flag for trial mode
+  regenerateRequested?: boolean;  // Flag for regenerate request
 }
 
 export interface ClusterResult {
   bookmarks: CategorizedBookmark[];
   categoryNames: string[];
 }
+
+export interface OrganizationOptions {
+  maxBookmarks?: number;  // undefined = all, number = trial mode
+}
+
+export interface NotificationOptions {
+  enabled?: boolean;  // default: true
+}
+
+export interface NotificationPayload {
+  type: 'success' | 'error' | 'cancelled';
+  title: string;
+  message: string;
+  stats?: {
+    processed: number;
+    categories: number;
+    deadlinks: number;
+    duplicatesMerged: number;
+    unreachable: number;
+  };
+  error?: string;
+}
+
+export interface UserPreferences {
+  autoNavigate?: boolean;  // undefined or true = enabled, false = disabled
+}
+
+export interface OrganizedFolderInfo {
+  id: string;
+  title: string;
+  isTrial?: boolean;
+}
+
+export interface FetchMetrics {
+  totalUrls: number;
+  successful: number;
+  failed: number;
+  timedOut: number;
+  averageTime: number;  // ms per URL
+  totalTime: number;    // total fetch time in ms
+  currentUrls?: string[];  // URLs currently being fetched
+}
+
+export interface StorageMetrics {
+  indexedDbWrites: number;
+  indexedDbReads: number;
+  checkpointSaves: number;
+  estimatedSize: number;  // bytes
+  diskUsage?: number;  // IndexedDB size in bytes
+}
+
+export interface CategorizationMetrics {
+  vocabularySize: number;
+  vectorDimensions: number;
+  clusters: number;
+  iterations: number;
+  convergenceTime: number;  // ms
+  categoryPreview?: { name: string; count: number }[];  // live category counts
+}
+
+export interface OrganizationMetrics {
+  foldersCreated: number;
+  bookmarksCreated: number;
+  batches: number;
+  averageBatchTime: number;  // ms per batch
+}
+
+export interface PerformanceMetrics {
+  totalElapsed: number;  // ms
+  averagePerBookmark: number;  // ms per bookmark
+  memoryEstimate: number;  // bytes
+  memoryUsed?: number;  // current memory usage in bytes (Chrome only)
+}
+
+export interface DetailedMetrics {
+  fetch?: FetchMetrics;
+  storage?: StorageMetrics;
+  categorization?: CategorizationMetrics;
+  organization?: OrganizationMetrics;
+  performance?: PerformanceMetrics;
+}
+
+export interface EditedCategory {
+  id: string;
+  name: string;
+  bookmarkIds: string[];
+}
+
+export type CategoryEditAction =
+  | { type: 'rename'; categoryId: string; newName: string }
+  | { type: 'merge'; sourceCategoryId: string; targetCategoryId: string }
+  | { type: 'delete'; categoryId: string };

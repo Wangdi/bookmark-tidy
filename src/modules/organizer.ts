@@ -39,15 +39,15 @@ export function searchFolder(node: chrome.bookmarks.BookmarkTreeNode, name: stri
 }
 
 /**
- * Find existing organized folder
+ * Find folder by name in the bookmark tree
  */
-async function findOrganizedFolder(): Promise<chrome.bookmarks.BookmarkTreeNode | null> {
+async function findFolderByName(name: string): Promise<chrome.bookmarks.BookmarkTreeNode | null> {
   const tree = await chrome.bookmarks.getTree();
   const root = tree[0];
 
   // Search in root level children (Bookmarks Bar, Other Bookmarks, etc.)
   for (const rootChild of root.children || []) {
-    const found = searchFolder(rootChild, ORGANIZED_FOLDER_NAME);
+    const found = searchFolder(rootChild, name);
     if (found) return found;
   }
 
@@ -55,10 +55,17 @@ async function findOrganizedFolder(): Promise<chrome.bookmarks.BookmarkTreeNode 
 }
 
 /**
+ * Find existing organized folder
+ */
+async function findOrganizedFolder(folderName: string = ORGANIZED_FOLDER_NAME): Promise<chrome.bookmarks.BookmarkTreeNode | null> {
+  return findFolderByName(folderName);
+}
+
+/**
  * Delete existing organized folder
  */
-async function deleteOrganizedFolder(): Promise<void> {
-  const existing = await findOrganizedFolder();
+async function deleteOrganizedFolder(folderName: string = ORGANIZED_FOLDER_NAME): Promise<void> {
+  const existing = await findOrganizedFolder(folderName);
   if (existing && existing.id) {
     await chrome.bookmarks.removeTree(existing.id);
   }
@@ -67,8 +74,8 @@ async function deleteOrganizedFolder(): Promise<void> {
 /**
  * Clear the organized folder (public API for reset)
  */
-export async function clearOrganizedFolder(): Promise<void> {
-  await deleteOrganizedFolder();
+export async function clearOrganizedFolder(folderName: string = ORGANIZED_FOLDER_NAME): Promise<void> {
+  await deleteOrganizedFolder(folderName);
 }
 
 /**
@@ -156,16 +163,17 @@ export async function organizeBookmarks(
   categorizedBookmarks: CategorizedBookmark[],
   deadlinks: ProcessedBookmark[],
   unreachable: ProcessedBookmark[],
-  duplicatesMerged: number
+  duplicatesMerged: number,
+  folderName: string = ORGANIZED_FOLDER_NAME
 ): Promise<OrganizerResult> {
   // Delete existing organized folder
-  await deleteOrganizedFolder();
+  await deleteOrganizedFolder(folderName);
 
   // Get parent folder for our organized folder
   const parentId = await getOtherBookmarksFolderId();
 
   // Create root organized folder
-  const organizedFolder = await createFolder(ORGANIZED_FOLDER_NAME, parentId);
+  const organizedFolder = await createFolder(folderName, parentId);
 
   // Group categorized bookmarks by category
   const categoryGroups = new Map<string, Map<string, CategorizedBookmark[]>>();

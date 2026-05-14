@@ -12,8 +12,42 @@
     <div id="idle-state" class="state">
       <h1>📚 Bookmark Tidy</h1>
       <p class="status-text">Ready to organize bookmarks</p>
+      <!-- Trial mode input group -->
+      <div class="trial-input-group">
+        <label for="trial-count">Trial mode (optional):</label>
+        <div class="trial-input-wrapper">
+          <input
+            type="number"
+            id="trial-count"
+            min="10"
+            max="500"
+            step="1"
+            placeholder="e.g., 50"
+            class="trial-input"
+          />
+          <span class="trial-hint">bookmarks</span>
+        </div>
+        <p class="trial-help">Leave empty to process all. Range: 10-500 (default: 50)</p>
+      </div>
       <button id="start-btn" class="btn primary">Organize Bookmarks</button>
       <p id="bookmark-count" class="count-text"></p>
+      <div class="divider"></div>
+      <div class="settings-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="notification-toggle" checked />
+          <span class="toggle-slider"></span>
+          <span class="toggle-text">Enable notifications</span>
+        </label>
+        <p class="settings-hint">Get notified when organization completes</p>
+      </div>
+      <div class="settings-group">
+        <label class="toggle-label">
+          <input type="checkbox" id="auto-navigate-toggle" checked />
+          <span class="toggle-slider"></span>
+          <span class="toggle-text">Auto-open bookmarks when done</span>
+        </label>
+        <p class="settings-hint">Automatically open bookmarks manager on completion</p>
+      </div>
       <div class="divider"></div>
       <button id="reset-btn" class="btn danger">Clear All Data</button>
     </div>
@@ -29,6 +63,37 @@
       <p id="current-url" class="current-url"></p>
       <p id="progress-count" class="count-text"></p>
       <button id="cancel-btn" class="btn secondary">Cancel</button>
+      <button id="details-toggle" class="btn text">Show Details</button>
+      <div id="details-panel" class="details-panel hidden">
+        <div class="details-section">
+          <h4>Fetching URLs</h4>
+          <div id="fetch-urls" class="url-list">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Fetch Stats</h4>
+          <div id="fetch-metrics" class="metrics-content">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Storage</h4>
+          <div id="storage-metrics" class="metrics-content">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Categories</h4>
+          <div id="category-preview" class="category-preview">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Categorization</h4>
+          <div id="categorization-metrics" class="metrics-content">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Organization</h4>
+          <div id="organization-metrics" class="metrics-content">-</div>
+        </div>
+        <div class="details-section">
+          <h4>Performance</h4>
+          <div id="performance-metrics" class="metrics-content">-</div>
+        </div>
+      </div>
     </div>
 
     <!-- COMPLETE State -->
@@ -43,6 +108,21 @@
       <button id="done-btn" class="btn primary">Done</button>
     </div>
 
+    <!-- Category Editor State -->
+    <div id="editor-state" class="state hidden">
+      <h2>Category Preview</h2>
+      <p class="editor-help">Review and edit categories before organizing</p>
+
+      <div id="category-tree" class="category-tree">
+        <!-- Categories will be rendered here -->
+      </div>
+
+      <div class="editor-actions">
+        <button id="regenerate-btn" class="btn secondary">🔄 Regenerate</button>
+        <button id="apply-btn" class="btn primary">✅ Apply Changes</button>
+      </div>
+    </div>
+
     <!-- ERROR State -->
     <div id="error-state" class="state hidden">
       <h1>📚 Bookmark Tidy</h1>
@@ -50,6 +130,21 @@
       <p id="error-message" class="error-message"></p>
       <button id="retry-btn" class="btn primary">Try Again</button>
     </div>
+
+    <!-- Category Item Template -->
+    <template id="category-template">
+      <div class="category-item">
+        <div class="category-header">
+          <span class="category-name"></span>
+          <span class="category-count"></span>
+        </div>
+        <div class="category-actions">
+          <button class="btn-edit" title="Rename">✏️</button>
+          <button class="btn-merge" title="Merge">🔀</button>
+          <button class="btn-delete" title="Delete">🗑️</button>
+        </div>
+      </div>
+    </template>
   </div>
 
   <script type="module" src="./index.ts"></script>

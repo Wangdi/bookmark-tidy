@@ -238,4 +238,33 @@ describe('storage module', () => {
       expect(result).toHaveLength(2);
     });
   });
+
+  describe('edited categories storage', () => {
+    it('stores edited categories', async () => {
+      const categories: import('../types').EditedCategory[] = [
+        { id: 'cat-1', name: 'Development', bookmarkIds: ['bm-1'] },
+      ];
+
+      await storage.saveEditedCategories(categories);
+
+      const stored = await storage.getEditedCategories();
+      expect(stored).toEqual(categories);
+    });
+
+    it('returns empty array when no categories stored', async () => {
+      const stored = await storage.getEditedCategories();
+      expect(stored).toEqual([]);
+    });
+
+    it('clears edited categories', async () => {
+      await storage.saveEditedCategories([
+        { id: 'cat-1', name: 'Test', bookmarkIds: [] },
+      ]);
+
+      await storage.clearEditedCategories();
+
+      const stored = await storage.getEditedCategories();
+      expect(stored).toEqual([]);
+    });
+  });
 });
